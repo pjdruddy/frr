@@ -250,6 +250,9 @@ struct attr {
 
 	/* rmap set table */
 	uint32_t rmap_table_id;
+
+	/* EVPN ES */
+	esi_t esi;
 };
 
 /* rmap_change_flags definition */
