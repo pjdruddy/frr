@@ -68,6 +68,7 @@
 #include "zebra/zebra_mroute.h"
 #include "zebra/zebra_vxlan.h"
 #include "zebra/zebra_errors.h"
+#include "zebra/zebra_evpn_mh.h"
 
 #ifndef AF_MPLS
 #define AF_MPLS 28
@@ -2400,6 +2401,15 @@ int netlink_nexthop_change(struct nlmsghdr *h, ns_id_t ns_id, int startup)
 	/* We use the ID key'd nhg table for kernel updates */
 	id = *((uint32_t *)RTA_DATA(tb[NHA_ID]));
 
+	if (zebra_evpn_mh_is_fdb_nh(id)) {
+		/* If this is a L2 NH just ignore it */
+		if (IS_ZEBRA_DEBUG_KERNEL || IS_ZEBRA_DEBUG_EVPN_MH_NH) {
+			zlog_debug("Ignore kernel update (%u) for fdb-nh 0x%x",
+					h->nlmsg_type, id);
+		}
+		return 0;
+	}
+
 	family = nhm->nh_family;
 	afi = family2afi(family);
 
@@ -2905,6 +2915,7 @@ netlink_macfdb_update_ctx(struct zebra_dplane_ctx *ctx)
 	int cmd;
 	struct in_addr vtep_ip;
 	vlanid_t vid;
+	uint32_t nhg_id;
 
 	if (dplane_ctx_get_op(ctx) == DPLANE_OP_MAC_INSTALL)
 		cmd = RTM_NEWNEIGH;
@@ -2933,9 +2944,15 @@ netlink_macfdb_update_ctx(struct zebra_dplane_ctx *ctx)
 		  dplane_ctx_mac_get_addr(ctx), 6);
 	req.ndm.ndm_ifindex = dplane_ctx_get_ifindex(ctx);
 
-	dst_alen = 4; // TODO: hardcoded
+	nhg_id = dplane_ctx_mac_get_nhg_id(ctx);
+	if (nhg_id)
+		addattr32(&req.n, sizeof(req), NDA_NH_ID, nhg_id);
+
 	vtep_ip = *(dplane_ctx_mac_get_vtep_ip(ctx));
-	addattr_l(&req.n, sizeof(req), NDA_DST, &vtep_ip, dst_alen);
+	if (vtep_ip.s_addr) {
+		dst_alen = 4; // TODO: hardcoded
+		addattr_l(&req.n, sizeof(req), NDA_DST, &vtep_ip, dst_alen);
+	}
 
 	vid = dplane_ctx_mac_get_vlan(ctx);
 
@@ -2958,7 +2975,10 @@ netlink_macfdb_update_ctx(struct zebra_dplane_ctx *ctx)
 			vid_buf[0] = '\0';
 
 		inet_ntop(AF_INET, &vtep_ip, ipbuf, sizeof(ipbuf));
-		snprintf(dst_buf, sizeof(dst_buf), " dst %s", ipbuf);
+		if (nhg_id)
+			sprintf(dst_buf, " nhg %u", nhg_id);
+		else
+			sprintf(dst_buf, " dst %s", inet_ntoa(vtep_ip));
 		prefix_mac2str(dplane_ctx_mac_get_addr(ctx), buf, sizeof(buf));
 
 		zlog_debug("Tx %s family %s IF %s(%u)%s %sMAC %s%s",
@@ -3602,4 +3622,163 @@ int netlink_mpls_multipath(int cmd, struct zebra_dplane_ctx *ctx)
 	return netlink_talk_info(netlink_talk_filter, &req.n,
 				 dplane_ctx_get_ns(ctx), 0);
 }
+
+/****************************************************************************
+* This code was developed in a branch that didn't have dplane APIs for
+* MAC updates. Hence the use of the legacy style. It will be moved to
+* the new dplane style pre-merge to master. XXX
+*/
+static int netlink_fdb_nh_update(uint32_t nh_id, struct in_addr vtep_ip)
+{
+	struct {
+		struct nlmsghdr n;
+		struct nhmsg nhm;
+		char buf[256];
+	} req;
+	int cmd = RTM_NEWNEXTHOP;
+	struct zebra_vrf *zvrf;
+	struct zebra_ns *zns;
+
+	zvrf = zebra_vrf_get_evpn();
+	if (!zvrf)
+		return -1;
+	zns = zvrf->zns;
+
+	memset(&req, 0, sizeof(req));
+
+	req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct nhmsg));
+	req.n.nlmsg_flags = NLM_F_REQUEST;
+	req.n.nlmsg_flags |= (NLM_F_CREATE | NLM_F_REPLACE);
+	req.n.nlmsg_type = cmd;
+	req.nhm.nh_family = AF_INET;
+
+	addattr32(&req.n, sizeof(req), NHA_ID, nh_id);
+	addattr_l(&req.n, sizeof(req), NHA_FDB, NULL, 0);
+	addattr_l(&req.n, sizeof(req), NHA_GATEWAY,
+			&vtep_ip, IPV4_MAX_BYTELEN);
+
+	if (IS_ZEBRA_DEBUG_KERNEL || IS_ZEBRA_DEBUG_EVPN_MH_NH) {
+		zlog_debug("Tx %s fdb-nh 0x%x %s",
+			   nl_msg_type_to_str(cmd), nh_id, inet_ntoa(vtep_ip));
+	}
+
+	return netlink_talk(netlink_talk_filter, &req.n, &zns->netlink_cmd, zns,
+			    0);
+}
+
+static int netlink_fdb_nh_del(uint32_t nh_id)
+{
+	struct {
+		struct nlmsghdr n;
+		struct nhmsg nhm;
+		char buf[256];
+	} req;
+	int cmd = RTM_DELNEXTHOP;
+	struct zebra_vrf *zvrf;
+	struct zebra_ns *zns;
+
+	zvrf = zebra_vrf_get_evpn();
+	if (!zvrf)
+		return -1;
+	zns = zvrf->zns;
+
+	memset(&req, 0, sizeof(req));
+
+	req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct nhmsg));
+	req.n.nlmsg_flags = NLM_F_REQUEST;
+	req.n.nlmsg_type = cmd;
+	req.nhm.nh_family = AF_UNSPEC;
+
+	addattr32(&req.n, sizeof(req), NHA_ID, nh_id);
+
+	if (IS_ZEBRA_DEBUG_KERNEL || IS_ZEBRA_DEBUG_EVPN_MH_NH) {
+		zlog_debug("Tx %s fdb-nh 0x%x",
+			   nl_msg_type_to_str(cmd), nh_id);
+	}
+
+	return netlink_talk(netlink_talk_filter, &req.n, &zns->netlink_cmd, zns,
+			    0);
+}
+
+static int netlink_fdb_nhg_update(uint32_t nhg_id, uint32_t nh_cnt,
+		struct nh_grp *nh_ids)
+{
+	struct {
+		struct nlmsghdr n;
+		struct nhmsg nhm;
+		char buf[256];
+	} req;
+	int cmd = RTM_NEWNEXTHOP;
+	struct zebra_vrf *zvrf;
+	struct zebra_ns *zns;
+	struct nexthop_grp grp[nh_cnt];
+	uint32_t i;
+
+	zvrf = zebra_vrf_get_evpn();
+	if (!zvrf)
+		return -1;
+	zns = zvrf->zns;
+
+	memset(&req, 0, sizeof(req));
+
+	req.n.nlmsg_len = NLMSG_LENGTH(sizeof(struct nhmsg));
+	req.n.nlmsg_flags = NLM_F_REQUEST;
+	req.n.nlmsg_flags |= (NLM_F_CREATE | NLM_F_REPLACE);
+	req.n.nlmsg_type = cmd;
+	req.nhm.nh_family = AF_UNSPEC;
+
+	addattr32(&req.n, sizeof(req), NHA_ID, nhg_id);
+	addattr_l(&req.n, sizeof(req), NHA_FDB, NULL, 0);
+	memset(&grp, 0, sizeof(grp));
+	for (i = 0; i < nh_cnt; ++i) {
+		grp[i].id = nh_ids[i].id;
+		grp[i].weight = nh_ids[i].weight;
+	}
+	addattr_l(&req.n, sizeof(req), NHA_GROUP,
+			grp, nh_cnt * sizeof(struct nexthop_grp));
+
+
+	if (IS_ZEBRA_DEBUG_KERNEL || IS_ZEBRA_DEBUG_EVPN_MH_NH) {
+		char vtep_str[ES_VTEP_LIST_STR_SZ];
+
+		vtep_str[0] = '\0';
+		for (i = 0; i < nh_cnt; ++i) {
+			sprintf(vtep_str + strlen(vtep_str), "0x%x ",
+					grp[i].id);
+		}
+
+		zlog_debug("Tx %s fdb-nhg 0x%x %s",
+			   nl_msg_type_to_str(cmd), nhg_id, vtep_str);
+	}
+
+	return netlink_talk(netlink_talk_filter, &req.n, &zns->netlink_cmd, zns,
+			    0);
+}
+
+static int netlink_fdb_nhg_del(uint32_t nhg_id)
+{
+	return netlink_fdb_nh_del(nhg_id);
+}
+
+int kernel_upd_mac_nh(uint32_t nh_id, struct in_addr vtep_ip)
+{
+	return netlink_fdb_nh_update(nh_id, vtep_ip);
+}
+
+int kernel_del_mac_nh(uint32_t nh_id)
+{
+	return netlink_fdb_nh_del(nh_id);
+}
+
+int kernel_upd_mac_nhg(uint32_t nhg_id, uint32_t nh_cnt,
+		struct nh_grp *nh_ids)
+{
+	return netlink_fdb_nhg_update(nhg_id, nh_cnt, nh_ids);
+}
+
+int kernel_del_mac_nhg(uint32_t nhg_id)
+{
+	return netlink_fdb_nhg_del(nhg_id);
+}
+
 #endif /* HAVE_NETLINK */
