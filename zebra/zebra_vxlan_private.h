@@ -62,6 +62,9 @@ struct zebra_vtep_t_ {
 	struct zebra_vtep_t_ *prev;
 };
 
+RB_HEAD(zebra_es_evi_rb_head, zebra_evpn_es_evi);
+RB_PROTOTYPE(zebra_es_evi_rb_head, zebra_evpn_es_evi, rb_node,
+		zebra_es_evi_rb_cmp);
 
 /*
  * VNI hash table
@@ -72,6 +75,10 @@ struct zebra_vtep_t_ {
 struct zebra_vni_t_ {
 	/* VNI - key */
 	vni_t vni;
+
+	/* ES flags */
+	uint32_t flags;
+#define ZVNI_READY_FOR_BGP (1 << 0) /* ready to be sent to BGP */
 
 	/* Flag for advertising gw macip */
 	uint8_t advertise_gw_macip;
@@ -102,6 +109,12 @@ struct zebra_vni_t_ {
 
 	/* List of local or remote neighbors (MAC+IP) */
 	struct hash *neigh_table;
+
+	/* RB tree of ES-EVIs */
+	struct zebra_es_evi_rb_head es_evi_rb_tree;
+
+	/* List of local ESs */
+	struct list *local_es_evi_list;
 };
 
 /* L3 VNI hash table */
@@ -301,6 +314,7 @@ struct zebra_mac_t_ {
 /* remote VTEP advertised MAC as default GW */
 #define ZEBRA_MAC_REMOTE_DEF_GW	0x40
 #define ZEBRA_MAC_DUPLICATE 0x80
+#define ZEBRA_MAC_SYNC    0x100
 
 	/* back pointer to zvni */
 	zebra_vni_t     *zvni;
@@ -314,6 +328,9 @@ struct zebra_mac_t_ {
 
 		struct in_addr r_vtep_ip;
 	} fwd_info;
+
+	/* Local or remote ES */
+	struct zebra_evpn_es *es;
 
 	/* Mobility sequence numbers associated with this entry. */
 	uint32_t rem_seq;
@@ -389,6 +406,9 @@ struct zebra_neigh_t_ {
 
 	/* MAC address. */
 	struct ethaddr emac;
+
+	/* Back pointer to MAC. Only applicable to hosts in a L2-VNI. */
+	zebra_mac_t *mac;
 
 	/* Underlying interface. */
 	ifindex_t ifindex;
@@ -504,5 +524,7 @@ typedef struct zebra_vxlan_sg_ {
 	/* For XG - num of SG using this as parent */
 	uint32_t ref_cnt;
 } zebra_vxlan_sg_t;
+
+extern zebra_vni_t *zvni_lookup(vni_t vni);
 
 #endif /* _ZEBRA_VXLAN_PRIVATE_H */
