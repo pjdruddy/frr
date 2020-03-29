@@ -23,6 +23,7 @@
 #ifdef HAVE_NETLINK
 
 #include <net/if_arp.h>
+#include <linux/if_bridge.h>
 #include <linux/lwtunnel.h>
 #include <linux/mpls_iptunnel.h>
 #include <linux/neighbour.h>
@@ -2599,6 +2600,9 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 	char vid_buf[20];
 	char dst_buf[30];
 	bool sticky;
+	bool local_inactive = false;
+	bool dp_static = false;
+	uint32_t nhg_id = 0;
 
 	ndm = NLMSG_DATA(h);
 
@@ -2645,13 +2649,29 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 		sprintf(dst_buf, " dst %s", inet_ntoa(vtep_ip));
 	}
 
+	if (tb[NDA_NH_ID])
+		nhg_id = *(uint32_t *)RTA_DATA(tb[NDA_NH_ID]);
+
+	if (ndm->ndm_state & NUD_STALE)
+		local_inactive = true;
+
+	if (tb[NDA_NOTIFY]) {
+		uint8_t nfy_flags;
+
+		dp_static = true;
+		nfy_flags = *(uint8_t *)RTA_DATA(tb[NDA_NOTIFY]);
+		/* local activity has not been detected on the entry */
+		if (nfy_flags & (1 << BR_FDB_NFY_INACTIVE))
+			local_inactive = true;
+	}
+
 	if (IS_ZEBRA_DEBUG_KERNEL)
-		zlog_debug("Rx %s AF_BRIDGE IF %u%s st 0x%x fl 0x%x MAC %s%s",
+		zlog_debug("Rx %s AF_BRIDGE IF %u%s st 0x%x fl 0x%x MAC %s%s nhg %d",
 			   nl_msg_type_to_str(h->nlmsg_type),
 			   ndm->ndm_ifindex, vid_present ? vid_buf : "",
 			   ndm->ndm_state, ndm->ndm_flags,
 			   prefix_mac2str(&mac, buf, sizeof(buf)),
-			   dst_present ? dst_buf : "");
+			   dst_present ? dst_buf : "", nhg_id);
 
 	/* The interface should exist. */
 	ifp = if_lookup_by_index_per_ns(zebra_ns_lookup(ns_id),
@@ -2674,7 +2694,7 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 		return 0;
 	}
 
-	sticky = !!(ndm->ndm_state & NUD_NOARP);
+	sticky = !!(ndm->ndm_flags & NTF_STICKY);
 
 	if (filter_vlan && vid != filter_vlan) {
 		if (IS_ZEBRA_DEBUG_KERNEL)
@@ -2702,7 +2722,7 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 							       vid);
 
 		return zebra_vxlan_local_mac_add_update(ifp, br_if, &mac, vid,
-							sticky);
+				sticky, local_inactive, dp_static);
 	}
 
 	/* This is a delete notification.
@@ -2715,6 +2735,9 @@ static int netlink_macfdb_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 	 * Note: We will get notifications from both bridge driver and VxLAN
 	 * driver.
 	 */
+	if (nhg_id)
+		return 0;
+
 	if (dst_present) {
 		u_char zero_mac[6] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
 
@@ -2916,6 +2939,8 @@ netlink_macfdb_update_ctx(struct zebra_dplane_ctx *ctx)
 	struct in_addr vtep_ip;
 	vlanid_t vid;
 	uint32_t nhg_id;
+	uint32_t update_flags;
+	uint8_t nfy_flags = 0;
 
 	if (dplane_ctx_get_op(ctx) == DPLANE_OP_MAC_INSTALL)
 		cmd = RTM_NEWNEIGH;
@@ -2930,13 +2955,35 @@ netlink_macfdb_update_ctx(struct zebra_dplane_ctx *ctx)
 		req.n.nlmsg_flags |= (NLM_F_CREATE | NLM_F_REPLACE);
 	req.n.nlmsg_type = cmd;
 	req.ndm.ndm_family = AF_BRIDGE;
-	req.ndm.ndm_flags |= NTF_SELF | NTF_MASTER;
+	req.ndm.ndm_flags |= NTF_MASTER;
 	req.ndm.ndm_state = NUD_REACHABLE;
 
-	if (dplane_ctx_mac_is_sticky(ctx))
-		req.ndm.ndm_state |= NUD_NOARP;
-	else
-		req.ndm.ndm_flags |= NTF_EXT_LEARNED;
+	update_flags = dplane_ctx_mac_get_update_flags(ctx);
+	if (update_flags & DPLANE_MAC_REMOTE) {
+		req.ndm.ndm_flags |= NTF_SELF;
+		if (dplane_ctx_mac_is_sticky(ctx))
+			req.ndm.ndm_flags |= NTF_STICKY;
+		else
+			req.ndm.ndm_flags |= NTF_EXT_LEARNED;
+		/* if it was static-local previously we need to clear the
+		 * notify flags on replace with remote
+		 */
+		if (update_flags & DPLANE_MAC_WAS_STATIC)
+			addattr_l(&req.n, sizeof(req), NDA_NOTIFY,
+					&nfy_flags, sizeof(nfy_flags));
+	} else {
+		/* local mac */
+		if (update_flags & DPLANE_MAC_SET_STATIC) {
+			nfy_flags |= (1 << BR_FDB_NFY_STATIC);
+			req.ndm.ndm_state |= NUD_NOARP;
+		}
+
+		if (update_flags & DPLANE_MAC_SET_INACTIVE)
+			nfy_flags |= (1 << BR_FDB_NFY_INACTIVE);
+
+		addattr_l(&req.n, sizeof(req), NDA_NOTIFY,
+				&nfy_flags, sizeof(nfy_flags));
+	}
 
 	addattr_l(&req.n, sizeof(req),
 		  NDA_PROTOCOL, &protocol, sizeof(protocol));
@@ -2975,10 +3022,15 @@ netlink_macfdb_update_ctx(struct zebra_dplane_ctx *ctx)
 			vid_buf[0] = '\0';
 
 		inet_ntop(AF_INET, &vtep_ip, ipbuf, sizeof(ipbuf));
-		if (nhg_id)
-			sprintf(dst_buf, " nhg %u", nhg_id);
-		else
-			sprintf(dst_buf, " dst %s", inet_ntoa(vtep_ip));
+
+		if (update_flags & DPLANE_MAC_REMOTE) {
+			if (nhg_id)
+				sprintf(dst_buf, " nhg %u", nhg_id);
+			else
+				sprintf(dst_buf, " dst %s", inet_ntoa(vtep_ip));
+		} else {
+			sprintf(dst_buf, " nfy 0x%x", nfy_flags);
+		}
 		prefix_mac2str(dplane_ctx_mac_get_addr(ctx), buf, sizeof(buf));
 
 		zlog_debug("Tx %s family %s IF %s(%u)%s %sMAC %s%s",
@@ -2987,6 +3039,14 @@ netlink_macfdb_update_ctx(struct zebra_dplane_ctx *ctx)
 			   dplane_ctx_get_ifname(ctx),
 			   dplane_ctx_get_ifindex(ctx), vid_buf,
 			   dplane_ctx_mac_is_sticky(ctx) ? "sticky " : "",
+			   (update_flags &
+				DPLANE_MAC_REMOTE) ? "rem " : "",
+			   (update_flags &
+				DPLANE_MAC_WAS_STATIC) ? "clr_sync " : "",
+			   (update_flags &
+				DPLANE_MAC_SET_STATIC) ? "static " : "",
+			   (update_flags &
+				DPLANE_MAC_SET_INACTIVE) ? "inactive " : "",
 			   buf, dst_buf);
 	}
 
@@ -3027,6 +3087,8 @@ static void netlink_handle_5549(struct ndmsg *ndm, struct zebra_if *zif,
 #define NUD_VALID                                                              \
 	(NUD_PERMANENT | NUD_NOARP | NUD_REACHABLE | NUD_PROBE | NUD_STALE     \
 	 | NUD_DELAY)
+#define NUD_LOCAL_ACTIVE                                                 \
+	(NUD_PERMANENT | NUD_NOARP | NUD_REACHABLE)
 
 static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 {
@@ -3042,6 +3104,7 @@ static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 	int mac_present = 0;
 	bool is_ext;
 	bool is_router;
+	bool local_inactive;
 
 	ndm = NLMSG_DATA(h);
 
@@ -3149,10 +3212,17 @@ static int netlink_ipneigh_change(struct nlmsghdr *h, int len, ns_id_t ns_id)
 		 * result
 		 * in re-adding the neighbor if it is a valid "remote" neighbor.
 		 */
-		if (ndm->ndm_state & NUD_VALID)
+		if (ndm->ndm_state & NUD_VALID) {
+			local_inactive = !(ndm->ndm_state & NUD_LOCAL_ACTIVE);
+
+			/* XXX - populate dp-static based on the sync flags
+			 * in the kernel
+			 */
 			return zebra_vxlan_handle_kernel_neigh_update(
 				ifp, link_if, &ip, &mac, ndm->ndm_state,
-				is_ext, is_router);
+				is_ext, is_router, local_inactive,
+				false /* dp_static */);
+		}
 
 		return zebra_vxlan_handle_kernel_neigh_del(ifp, link_if, &ip);
 	}
