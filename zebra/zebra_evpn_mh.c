@@ -1289,9 +1289,9 @@ static void zebra_evpn_es_local_mac_update(struct zebra_evpn_es *es,
 
 	for (ALL_LIST_ELEMENTS_RO(es->mac_list, node, mac)) {
 		if (CHECK_FLAG(mac->flags, ZEBRA_MAC_ES_PEER_ACTIVE)) {
-			zebra_vxlan_sync_mac_dp_install(mac,
-					false /* set_inactive */,
-					force_clear_static, __func__);
+			zebra_evpn_sync_mac_dp_install(
+				mac, false /* set_inactive */,
+				force_clear_static, __func__);
 		}
 	}
 }
