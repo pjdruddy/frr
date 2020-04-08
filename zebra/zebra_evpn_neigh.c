@@ -10336,4 +10336,3 @@ extern void zebra_evpn_init(void)
 {
 	hook_register(zserv_client_close, zebra_evpn_cfg_clean_up);
 }
-//refactor split neigh functions out into zebra_evpn_neigh.c
