@@ -12143,4 +12143,3 @@ extern void zebra_evpn_init(void)
 {
 	hook_register(zserv_client_close, zebra_evpn_cfg_clean_up);
 }
-//refactor split part of this file to zebra_evpn_mac.c
