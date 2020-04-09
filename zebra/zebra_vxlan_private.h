@@ -236,17 +236,16 @@ extern struct interface *zl3vni_map_to_vxlan_if(zebra_l3vni_t *zl3vni);
 extern struct interface *zl3vni_map_to_svi_if(zebra_l3vni_t *zl3vni);
 extern struct interface *zl3vni_map_to_mac_vlan_if(zebra_l3vni_t *zl3vni);
 
-/* PJDR remove to neigh.h */
-void zevi_process_neigh_on_local_mac_change(zebra_evi_t *zevi,
-					    zebra_mac_t *zmac, bool seq_change,
-					    bool es_change);
-void zevi_process_neigh_on_remote_mac_add(zebra_evi_t *zevi, zebra_mac_t *zmac);
 
+/* PJDR remove to neigh.h */
 int zevi_rem_mac_uninstall(zebra_evi_t *zevi, zebra_mac_t *mac);
 int zevi_rem_mac_install(zebra_evi_t *zevi, zebra_mac_t *mac, bool was_static);
 int zevi_rem_neigh_install(zebra_evi_t *zevi, zebra_neigh_t *n,
 			   bool was_static);
-int zevi_neigh_uninstall(zebra_evi_t *zevi, zebra_neigh_t *n);
+int remote_neigh_count(zebra_mac_t *zmac);
+
+/* PJDR revisit */
+struct interface *zevi_map_to_svi(vlanid_t vid, struct interface *br_if);
 
 DECLARE_HOOK(zebra_rmac_update, (zebra_mac_t *rmac, zebra_l3vni_t *zl3vni,
 	     bool delete, const char *reason), (rmac, zl3vni, delete, reason))

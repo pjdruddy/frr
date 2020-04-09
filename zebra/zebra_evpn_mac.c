@@ -80,6 +80,30 @@ uint32_t num_valid_macs(zebra_evi_t *zevi)
 	return num_macs;
 }
 
+/*
+ * Decrement neighbor refcount of MAC; uninstall and free it if
+ * appropriate.
+ */
+void zevi_deref_ip2mac(zebra_evi_t *zevi, zebra_mac_t *mac)
+{
+	if (!CHECK_FLAG(mac->flags, ZEBRA_MAC_AUTO))
+		return;
+
+	/* If all remote neighbors referencing a remote MAC go away,
+	 * we need to uninstall the MAC.
+	 */
+	if (CHECK_FLAG(mac->flags, ZEBRA_MAC_REMOTE)
+	    && remote_neigh_count(mac) == 0) {
+		zevi_rem_mac_uninstall(zevi, mac);
+		zebra_evpn_es_mac_deref_entry(mac);
+		UNSET_FLAG(mac->flags, ZEBRA_MAC_REMOTE);
+	}
+
+	/* If no neighbors, delete the MAC. */
+	if (list_isempty(mac->neigh_list))
+		zebra_evpn_mac_del(zevi, mac);
+}
+
 static int zebra_evpn_dad_mac_auto_recovery_exp(struct thread *t)
 {
 	struct zebra_vrf *zvrf = NULL;
