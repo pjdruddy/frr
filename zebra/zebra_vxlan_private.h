@@ -240,12 +240,9 @@ extern struct interface *zl3vni_map_to_mac_vlan_if(zebra_l3vni_t *zl3vni);
 /* PJDR remove to neigh.h */
 int zevi_rem_mac_uninstall(zebra_evi_t *zevi, zebra_mac_t *mac);
 int zevi_rem_mac_install(zebra_evi_t *zevi, zebra_mac_t *mac, bool was_static);
-int zevi_rem_neigh_install(zebra_evi_t *zevi, zebra_neigh_t *n,
-			   bool was_static);
-int remote_neigh_count(zebra_mac_t *zmac);
 
-/* PJDR revisit */
-struct interface *zevi_map_to_svi(vlanid_t vid, struct interface *br_if);
+/* PJDR move this */
+struct interface *zevi_map_to_svi(zebra_evi_t *zevi);
 
 DECLARE_HOOK(zebra_rmac_update, (zebra_mac_t *rmac, zebra_l3vni_t *zl3vni,
 	     bool delete, const char *reason), (rmac, zl3vni, delete, reason))

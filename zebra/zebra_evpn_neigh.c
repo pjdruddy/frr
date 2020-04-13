@@ -154,8 +154,6 @@ int remote_neigh_count(zebra_mac_t *zmac)
  */
 int zevi_rem_neigh_install(zebra_evi_t *zevi, zebra_neigh_t *n, bool was_static)
 {
-	struct zebra_if *zif;
-	struct zebra_l2info_vxlan *vxl;
 	struct interface *vlan_if;
 	int flags;
 	int ret = 0;
@@ -163,12 +161,7 @@ int zevi_rem_neigh_install(zebra_evi_t *zevi, zebra_neigh_t *n, bool was_static)
 	if (!(n->flags & ZEBRA_NEIGH_REMOTE))
 		return 0;
 
-	zif = zevi->vxlan_if->info;
-	if (!zif)
-		return -1;
-	vxl = &zif->l2info.vxl;
-
-	vlan_if = zevi_map_to_svi(vxl->access_vlan, zif->brslave_info.br_if);
+	vlan_if = zevi_map_to_svi(zevi);
 	if (!vlan_if)
 		return -1;
 
@@ -692,23 +685,15 @@ zebra_evpn_proc_sync_neigh_update(zebra_evi_t *zevi, zebra_neigh_t *n,
 	bool old_mac_static;
 	bool new_mac_static;
 	bool set_dp_inactive = false;
-	struct zebra_if *zif;
 	char macbuf[ETHER_ADDR_STRLEN];
 	char ipbuf[INET6_ADDRSTRLEN];
 	bool created;
 	ifindex_t ifindex = 0;
 
 	/* locate l3-svi */
-	zif = zevi->vxlan_if->info;
-	if (zif) {
-		struct zebra_l2info_vxlan *vxl;
-
-		vxl = &zif->l2info.vxl;
-		ifp = zevi_map_to_svi(vxl->access_vlan,
-				      zif->brslave_info.br_if);
-		if (ifp)
-			ifindex = ifp->ifindex;
-	}
+	ifp = zevi_map_to_svi(zevi);
+	if (ifp)
+		ifindex = ifp->ifindex;
 
 	is_router = !!CHECK_FLAG(flags, ZEBRA_MACIP_TYPE_ROUTER_FLAG);
 	old_mac_static = zebra_evpn_mac_is_static(mac);
@@ -891,8 +876,6 @@ zebra_evpn_proc_sync_neigh_update(zebra_evi_t *zevi, zebra_neigh_t *n,
  */
 int zevi_neigh_uninstall(zebra_evi_t *zevi, zebra_neigh_t *n)
 {
-	struct zebra_if *zif;
-	struct zebra_l2info_vxlan *vxl;
 	struct interface *vlan_if;
 
 	if (!(n->flags & ZEBRA_NEIGH_REMOTE))
@@ -906,11 +889,7 @@ int zevi_neigh_uninstall(zebra_evi_t *zevi, zebra_neigh_t *n)
 		return -1;
 	}
 
-	zif = zevi->vxlan_if->info;
-	if (!zif)
-		return -1;
-	vxl = &zif->l2info.vxl;
-	vlan_if = zevi_map_to_svi(vxl->access_vlan, zif->brslave_info.br_if);
+	vlan_if = zevi_map_to_svi(zevi);
 	if (!vlan_if)
 		return -1;
 
@@ -1162,16 +1141,9 @@ void zevi_process_neigh_on_remote_mac_del(zebra_evi_t *zevi, zebra_mac_t *zmac)
  */
 static int zevi_neigh_probe(zebra_evi_t *zevi, zebra_neigh_t *n)
 {
-	struct zebra_if *zif;
-	struct zebra_l2info_vxlan *vxl;
 	struct interface *vlan_if;
 
-	zif = zevi->vxlan_if->info;
-	if (!zif)
-		return -1;
-	vxl = &zif->l2info.vxl;
-
-	vlan_if = zevi_map_to_svi(vxl->access_vlan, zif->brslave_info.br_if);
+	vlan_if = zevi_map_to_svi(zevi);
 	if (!vlan_if)
 		return -1;
 

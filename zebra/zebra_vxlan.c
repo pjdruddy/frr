@@ -91,6 +91,7 @@ static void zevi_print_hash(struct hash_bucket *bucket, void *ctxt[]);
 
 static zebra_evi_t *zevi_from_svi(struct interface *ifp,
 				  struct interface *br_if);
+static struct interface *zvni_map_to_svi(vlanid_t vid, struct interface *br_if);
 static struct interface *zevi_map_to_macvlan(struct interface *br_if,
 					     struct interface *svi_if);
 
@@ -1298,7 +1299,7 @@ static void zevi_gw_macip_del_for_vni_hash(struct hash_bucket *bucket,
 	zl2_info = zif->l2info.vxl;
 
 	vlan_if =
-		zevi_map_to_svi(zl2_info.access_vlan, zif->brslave_info.br_if);
+		zvni_map_to_svi(zl2_info.access_vlan, zif->brslave_info.br_if);
 	if (!vlan_if)
 		return;
 
@@ -1336,7 +1337,7 @@ static void zevi_gw_macip_add_for_vni_hash(struct hash_bucket *bucket,
 	zl2_info = zif->l2info.vxl;
 
 	vlan_if =
-		zevi_map_to_svi(zl2_info.access_vlan, zif->brslave_info.br_if);
+		zvni_map_to_svi(zl2_info.access_vlan, zif->brslave_info.br_if);
 	if (!vlan_if)
 		return;
 
@@ -1390,7 +1391,7 @@ static void zevi_svi_macip_del_for_vni_hash(struct hash_bucket *bucket,
 	zl2_info = zif->l2info.vxl;
 
 	vlan_if =
-		zevi_map_to_svi(zl2_info.access_vlan, zif->brslave_info.br_if);
+		zvni_map_to_svi(zl2_info.access_vlan, zif->brslave_info.br_if);
 	if (!vlan_if)
 		return;
 
@@ -1532,7 +1533,7 @@ static zebra_evi_t *zevi_from_svi(struct interface *ifp,
  * (b) In the case of a VLAN-unaware bridge, the SVI is the bridge interface
  * itself
  */
-struct interface *zevi_map_to_svi(vlanid_t vid, struct interface *br_if)
+static struct interface *zvni_map_to_svi(vlanid_t vid, struct interface *br_if)
 {
 	struct zebra_ns *zns;
 	struct route_node *rn;
@@ -1578,6 +1579,26 @@ struct interface *zevi_map_to_svi(vlanid_t vid, struct interface *br_if)
 	}
 
 	return found ? tmp_if : NULL;
+}
+
+struct interface *zevi_map_to_svi(zebra_evi_t *zevi)
+{
+	struct interface *ifp;
+	struct zebra_if *zif = NULL;
+	struct zebra_l2info_vxlan zl2_info;
+
+	ifp = zevi->vxlan_if;
+	if (!ifp)
+		return NULL;
+	zif = ifp->info;
+	if (!zif)
+		return NULL;
+
+	/* If down or not mapped to a bridge, we're done. */
+	if (!if_is_operative(ifp) || !zif->brslave_info.br_if)
+		return NULL;
+	zl2_info = zif->l2info.vxl;
+	return zvni_map_to_svi(zl2_info.access_vlan, zif->brslave_info.br_if);
 }
 
 /* Map to MAC-VLAN interface corresponding to specified SVI interface.
@@ -1770,7 +1791,7 @@ static void zevi_read_mac_neigh(zebra_evi_t *zevi, struct interface *ifp)
 			zif->brslave_info.bridge_ifindex);
 
 	macfdb_read_for_bridge(zns, ifp, zif->brslave_info.br_if);
-	vlan_if = zevi_map_to_svi(vxl->access_vlan, zif->brslave_info.br_if);
+	vlan_if = zvni_map_to_svi(vxl->access_vlan, zif->brslave_info.br_if);
 	if (vlan_if) {
 
 		/* Add SVI MAC-IP */
@@ -2128,7 +2149,7 @@ static void zevi_build_hash_table(void)
 					zebra_evpn_es_set_base_vni(zevi);
 				}
 				zevi_vxlan_if_set(zevi, ifp, true /* set */);
-				vlan_if = zevi_map_to_svi(
+				vlan_if = zvni_map_to_svi(
 					vxl->access_vlan,
 					zif->brslave_info.br_if);
 				if (vlan_if) {
@@ -2977,7 +2998,7 @@ struct interface *zl3vni_map_to_svi_if(zebra_l3vni_t *zl3vni)
 
 	vxl = &zif->l2info.vxl;
 
-	return zevi_map_to_svi(vxl->access_vlan, zif->brslave_info.br_if);
+	return zvni_map_to_svi(vxl->access_vlan, zif->brslave_info.br_if);
 }
 
 struct interface *zl3vni_map_to_mac_vlan_if(zebra_l3vni_t *zl3vni)
@@ -3885,7 +3906,7 @@ void process_remote_macip_del(vni_t vni, struct ethaddr *macaddr,
 		    (memcmp(n->emac.octet, macaddr->octet, ETH_ALEN) == 0)) {
 			struct interface *vlan_if;
 
-			vlan_if = zevi_map_to_svi(vxl->access_vlan,
+			vlan_if = zvni_map_to_svi(vxl->access_vlan,
 						  zif->brslave_info.br_if);
 			if (IS_ZEBRA_DEBUG_VXLAN)
 				zlog_debug(
@@ -6616,7 +6637,7 @@ int zebra_vxlan_if_up(struct interface *ifp)
 		}
 
 		assert(zevi->vxlan_if == ifp);
-		vlan_if = zevi_map_to_svi(vxl->access_vlan,
+		vlan_if = zvni_map_to_svi(vxl->access_vlan,
 					  zif->brslave_info.br_if);
 		if (vlan_if) {
 			zevi->vrf_id = vlan_if->vrf_id;
@@ -6955,7 +6976,7 @@ int zebra_vxlan_if_add(struct interface *ifp)
 			zebra_evpn_es_set_base_vni(zevi);
 		}
 		zevi_vxlan_if_set(zevi, ifp, true /* set */);
-		vlan_if = zevi_map_to_svi(vxl->access_vlan,
+		vlan_if = zvni_map_to_svi(vxl->access_vlan,
 					  zif->brslave_info.br_if);
 		if (vlan_if) {
 			zevi->vrf_id = vlan_if->vrf_id;
@@ -7277,7 +7298,7 @@ void zebra_vxlan_advertise_svi_macip(ZAPI_HANDLER_ARGS)
 			return;
 
 		zl2_info = zif->l2info.vxl;
-		vlan_if = zevi_map_to_svi(zl2_info.access_vlan,
+		vlan_if = zvni_map_to_svi(zl2_info.access_vlan,
 					  zif->brslave_info.br_if);
 		if (!vlan_if)
 			return;
@@ -7348,7 +7369,7 @@ void zebra_vxlan_advertise_subnet(ZAPI_HANDLER_ARGS)
 	zl2_info = zif->l2info.vxl;
 
 	vlan_if =
-		zevi_map_to_svi(zl2_info.access_vlan, zif->brslave_info.br_if);
+		zvni_map_to_svi(zl2_info.access_vlan, zif->brslave_info.br_if);
 	if (!vlan_if)
 		return;
 
@@ -7437,7 +7458,7 @@ void zebra_vxlan_advertise_gw_macip(ZAPI_HANDLER_ARGS)
 
 		zl2_info = zif->l2info.vxl;
 
-		vlan_if = zevi_map_to_svi(zl2_info.access_vlan,
+		vlan_if = zvni_map_to_svi(zl2_info.access_vlan,
 					  zif->brslave_info.br_if);
 		if (!vlan_if)
 			return;
