@@ -4509,6 +4509,10 @@ void zebra_vxlan_print_neigh_vni_vtep(struct vty *vty, struct zebra_vrf *zvrf,
 			vty_out(vty, "%% VNI %u does not exist\n", vni);
 		return;
 	}
+
+	if (use_json)
+		json = json_object_new_object();
+
 	num_neigh = hashcount(zevi->neigh_table);
 	if (!num_neigh)
 		return;
