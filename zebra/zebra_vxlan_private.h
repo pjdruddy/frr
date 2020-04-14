@@ -243,6 +243,8 @@ int zevi_rem_mac_install(zebra_evi_t *zevi, zebra_mac_t *mac, bool was_static);
 
 /* PJDR move this */
 struct interface *zevi_map_to_svi(zebra_evi_t *zevi);
+int advertise_gw_macip_enabled(zebra_evi_t *zevi);
+int advertise_svi_macip_enabled(zebra_evi_t *zevi);
 
 DECLARE_HOOK(zebra_rmac_update, (zebra_mac_t *rmac, zebra_l3vni_t *zl3vni,
 	     bool delete, const char *reason), (rmac, zl3vni, delete, reason))
