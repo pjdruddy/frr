@@ -167,15 +167,6 @@ zebra_evpn_proc_sync_neigh_update(zebra_evi_t *zevi, zebra_neigh_t *n,
 				  uint8_t flags, uint32_t seq, esi_t *esi,
 				  struct sync_mac_ip_ctx *ctx);
 void zebra_evpn_sync_neigh_del(zebra_neigh_t *n);
-bool zebra_evpn_neigh_is_ready_for_bgp(zebra_neigh_t *n);
-void zebra_evpn_sync_neigh_dp_install(zebra_neigh_t *n, bool set_inactive,
-				      bool force_clear_static,
-				      const char *caller);
-bool zebra_evpn_neigh_is_static(zebra_neigh_t *neigh);
-void zebra_evpn_neigh_send_add_del_to_client(zebra_neigh_t *n,
-					     bool old_bgp_ready,
-					     bool new_bgp_ready);
-
 bool zebra_evpn_neigh_is_bgp_seq_ok(zebra_evi_t *zevi, zebra_neigh_t *n,
 				    struct ethaddr *macaddr, uint32_t seq);
 struct hash *zebra_neigh_db_create(const char *desc);
@@ -214,6 +205,9 @@ int zebra_evpn_neigh_gw_macip_add(struct interface *ifp, zebra_evi_t *zevi,
 void zevi_neigh_remote_uninstall(zebra_evi_t *zevi, struct zebra_vrf *zvrf,
 				 zebra_neigh_t *n, zebra_mac_t *mac,
 				 struct ipaddr *ipaddr);
+int zevi_neigh_del_ip(zebra_evi_t *zevi, struct zebra_vrf *zvrf,
+		      struct ipaddr *ip);
+
 #ifdef __cplusplus
 }
 #endif

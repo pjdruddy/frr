@@ -5250,14 +5250,9 @@ int zebra_vxlan_handle_kernel_neigh_del(struct interface *ifp,
 					struct ipaddr *ip)
 {
 	char buf[INET6_ADDRSTRLEN];
-	char buf2[ETHER_ADDR_STRLEN];
-	zebra_neigh_t *n = NULL;
 	zebra_evi_t *zevi = NULL;
-	zebra_mac_t *zmac = NULL;
-	zebra_l3vni_t *zl3vni = NULL;
 	struct zebra_vrf *zvrf;
-	bool old_bgp_ready;
-	bool new_bgp_ready;
+	zebra_l3vni_t *zl3vni = NULL;
 
 	/* check if this is a remote neigh entry corresponding to remote
 	 * next-hop
@@ -5291,86 +5286,9 @@ int zebra_vxlan_handle_kernel_neigh_del(struct interface *ifp,
 			   ipaddr2str(ip, buf, sizeof(buf)), ifp->name,
 			   ifp->ifindex, zevi->vni);
 
-	/* If entry doesn't exist, nothing to do. */
-	n = zevi_neigh_lookup(zevi, ip);
-	if (!n)
-		return 0;
-
-	zmac = zebra_evpn_mac_lookup(zevi, &n->emac);
-	if (!zmac) {
-		if (IS_ZEBRA_DEBUG_VXLAN)
-			zlog_debug(
-				"Trying to del a neigh %s without a mac %s on VNI %u",
-				ipaddr2str(ip, buf, sizeof(buf)),
-				prefix_mac2str(&n->emac, buf2, sizeof(buf2)),
-				zevi->vni);
-
-		return 0;
-	}
-
-	/* If it is a remote entry, the kernel has aged this out or someone has
-	 * deleted it, it needs to be re-installed as Quagga is the owner.
-	 */
-	if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_REMOTE)) {
-		zevi_rem_neigh_install(zevi, n, false /*was_static*/);
-		return 0;
-	}
-
-	/* if this is a sync entry it cannot be dropped re-install it in
-	 * the dataplane
-	 */
-	old_bgp_ready = zebra_evpn_neigh_is_ready_for_bgp(n);
-	if (zebra_evpn_neigh_is_static(n)) {
-		if (IS_ZEBRA_DEBUG_EVPN_MH_NEIGH)
-			zlog_debug("re-add sync neigh vni %u ip %s mac %s 0x%x",
-				   n->zevi->vni,
-				   ipaddr2str(&n->ip, buf, sizeof(buf)),
-				   prefix_mac2str(&n->emac, buf2, sizeof(buf2)),
-				   n->flags);
-
-		if (!CHECK_FLAG(n->flags, ZEBRA_NEIGH_LOCAL_INACTIVE))
-			SET_FLAG(n->flags, ZEBRA_NEIGH_LOCAL_INACTIVE);
-		/* inform-bgp about change in local-activity if any */
-		new_bgp_ready = zebra_evpn_neigh_is_ready_for_bgp(n);
-		zebra_evpn_neigh_send_add_del_to_client(n, old_bgp_ready,
-							new_bgp_ready);
-
-		/* re-install the entry in the kernel */
-		zebra_evpn_sync_neigh_dp_install(n, false /* set_inactive */,
-						 false /* force_clear_static */,
-						 __func__);
-
-		return 0;
-	}
-
 	zvrf = vrf_info_lookup(zevi->vxlan_if->vrf_id);
-	if (!zvrf) {
-		zlog_debug("%s: VNI %u vrf lookup failed.", __func__,
-			   zevi->vni);
-		return -1;
-	}
 
-	/* In case of feeze action, if local neigh is in duplicate state,
-	 * Mark the Neigh as inactive before sending delete request to BGPd,
-	 * If BGPd has remote entry, it will re-install
-	 */
-	if (zvrf->dad_freeze &&
-	    CHECK_FLAG(n->flags, ZEBRA_NEIGH_DUPLICATE))
-	    ZEBRA_NEIGH_SET_INACTIVE(n);
-
-	/* Remove neighbor from BGP. */
-	zevi_neigh_send_del_to_client(zevi, &n->ip, &n->emac, n->flags,
-				      n->state, false /* force */);
-
-	/* Delete this neighbor entry. */
-	zevi_neigh_del(zevi, n);
-
-	/* see if the AUTO mac needs to be deleted */
-	if (CHECK_FLAG(zmac->flags, ZEBRA_MAC_AUTO)
-	    && !listcount(zmac->neigh_list))
-		zebra_evpn_mac_del(zevi, zmac);
-
-	return 0;
+	return zevi_neigh_del_ip(zevi, zvrf, ip);
 }
 
 /*
