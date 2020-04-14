@@ -33,6 +33,7 @@
 #include "zebra/zserv.h"
 #include "zebra/debug.h"
 #include "zebra/zebra_router.h"
+#include "zebra/rt_netlink.h"
 #include "zebra/zebra_memory.h"
 #include "zebra/zebra_errors.h"
 #include "zebra/zebra_vrf.h"
@@ -922,7 +923,7 @@ zebra_evpn_proc_sync_neigh_update(zebra_evi_t *zevi, zebra_neigh_t *n,
 /*
  * Uninstall remote neighbor from the kernel.
  */
-int zevi_neigh_uninstall(zebra_evi_t *zevi, zebra_neigh_t *n)
+static int zevi_neigh_uninstall(zebra_evi_t *zevi, zebra_neigh_t *n)
 {
 	struct interface *vlan_if;
 
@@ -2525,4 +2526,42 @@ int zebra_evpn_neigh_gw_macip_add(struct interface *ifp, zebra_evi_t *zevi,
 					      n->flags, n->loc_seq);
 	}
 	return 0;
+}
+
+void zevi_neigh_remote_uninstall(zebra_evi_t *zevi, struct zebra_vrf *zvrf,
+				 zebra_neigh_t *n, zebra_mac_t *mac,
+				 struct ipaddr *ipaddr)
+{
+	char buf1[INET6_ADDRSTRLEN];
+
+	if (zvrf->dad_freeze && CHECK_FLAG(n->flags, ZEBRA_NEIGH_DUPLICATE)
+	    && CHECK_FLAG(n->flags, ZEBRA_NEIGH_REMOTE)
+	    && (memcmp(n->emac.octet, mac->macaddr.octet, ETH_ALEN) == 0)) {
+		struct interface *vlan_if;
+
+		vlan_if = zevi_map_to_svi(zevi);
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"%s: IP %s (flags 0x%x intf %s) is remote and duplicate, read kernel for local entry",
+				__func__,
+				ipaddr2str(ipaddr, buf1, sizeof(buf1)),
+				n->flags, vlan_if ? vlan_if->name : "Unknown");
+		if (vlan_if)
+			neigh_read_specific_ip(ipaddr, vlan_if);
+	}
+
+	/* When the MAC changes for an IP, it is possible the
+	 * client may update the new MAC before trying to delete the
+	 * "old" neighbor (as these are two different MACIP routes).
+	 * Do the delete only if the MAC matches.
+	 */
+	if (!memcmp(n->emac.octet, mac->macaddr.octet, ETH_ALEN)) {
+		if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_LOCAL)) {
+			zebra_evpn_sync_neigh_del(n);
+		} else if (CHECK_FLAG(n->flags, ZEBRA_NEIGH_REMOTE)) {
+			zevi_neigh_uninstall(zevi, n);
+			zevi_neigh_del(zevi, n);
+			zevi_deref_ip2mac(zevi, mac);
+		}
+	}
 }

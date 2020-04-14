@@ -143,7 +143,6 @@ struct neigh_walk_ctx {
 int neigh_list_cmp(void *p1, void *p2);
 void zevi_process_neigh_on_local_mac_del(zebra_evi_t *zevi, zebra_mac_t *zmac);
 int zevi_neigh_del(zebra_evi_t *zevi, zebra_neigh_t *n);
-int zevi_neigh_uninstall(zebra_evi_t *zevi, zebra_neigh_t *n);
 int zevi_neigh_send_add_to_client(zebra_evi_t *zevi, struct ipaddr *ip,
 				  struct ethaddr *macaddr, zebra_mac_t *zmac,
 				  uint32_t neigh_flags, uint32_t seq);
@@ -212,6 +211,9 @@ void process_neigh_remote_macip_add(zebra_evi_t *zevi, struct zebra_vrf *zvrf,
 int zebra_evpn_neigh_gw_macip_add(struct interface *ifp, zebra_evi_t *zevi,
 				  struct ipaddr *ip, zebra_mac_t *mac);
 
+void zevi_neigh_remote_uninstall(zebra_evi_t *zevi, struct zebra_vrf *zvrf,
+				 zebra_neigh_t *n, zebra_mac_t *mac,
+				 struct ipaddr *ipaddr);
 #ifdef __cplusplus
 }
 #endif
