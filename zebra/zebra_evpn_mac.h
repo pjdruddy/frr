@@ -244,6 +244,7 @@ void zebra_evpn_dup_addr_detect_for_mac(struct zebra_vrf *zvrf,
 void zebra_evpn_sync_mac_del(zebra_mac_t *mac);
 void zebra_evpn_mac_send_add_del_to_client(zebra_mac_t *mac, bool old_bgp_ready,
 					   bool new_bgp_ready);
+void zebra_evpn_rem_mac_del(zebra_evi_t *zevi, zebra_mac_t *mac);
 
 #ifdef __cplusplus
 }

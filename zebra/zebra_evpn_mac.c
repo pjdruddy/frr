@@ -1814,3 +1814,28 @@ void zevi_send_mac_to_client(zebra_evi_t *zevi)
 	hash_iterate(zevi->mac_table, zevi_send_mac_hash_entry_to_client,
 		     &wctx);
 }
+
+void zebra_evpn_rem_mac_del(zebra_evi_t *zevi, zebra_mac_t *mac)
+{
+	zevi_process_neigh_on_remote_mac_del(zevi, mac);
+	/* the remote sequence number in the auto mac entry
+	 * needs to be reset to 0 as the mac entry may have
+	 * been removed on all VTEPs (including
+	 * the originating one)
+	 */
+	mac->rem_seq = 0;
+
+	/* If all remote neighbors referencing a remote MAC
+	 * go away, we need to uninstall the MAC.
+	 */
+	if (remote_neigh_count(mac) == 0) {
+		zevi_rem_mac_uninstall(zevi, mac);
+		zebra_evpn_es_mac_deref_entry(mac);
+		UNSET_FLAG(mac->flags, ZEBRA_MAC_REMOTE);
+	}
+
+	if (list_isempty(mac->neigh_list))
+		zebra_evpn_mac_del(zevi, mac);
+	else
+		SET_FLAG(mac->flags, ZEBRA_MAC_AUTO);
+}

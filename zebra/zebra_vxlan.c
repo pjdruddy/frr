@@ -3607,31 +3607,6 @@ void process_remote_macip_add(vni_t vni, struct ethaddr *macaddr,
 				       seq, is_router);
 }
 
-static void zebra_evpn_rem_mac_del(zebra_evi_t *zevi, zebra_mac_t *mac)
-{
-	zevi_process_neigh_on_remote_mac_del(zevi, mac);
-	/* the remote sequence number in the auto mac entry
-	 * needs to be reset to 0 as the mac entry may have
-	 * been removed on all VTEPs (including
-	 * the originating one)
-	 */
-	mac->rem_seq = 0;
-
-	/* If all remote neighbors referencing a remote MAC
-	 * go away, we need to uninstall the MAC.
-	 */
-	if (remote_neigh_count(mac) == 0) {
-		zevi_rem_mac_uninstall(zevi, mac);
-		zebra_evpn_es_mac_deref_entry(mac);
-		UNSET_FLAG(mac->flags, ZEBRA_MAC_REMOTE);
-	}
-
-	if (list_isempty(mac->neigh_list))
-		zebra_evpn_mac_del(zevi, mac);
-	else
-		SET_FLAG(mac->flags, ZEBRA_MAC_AUTO);
-}
-
 /* Process a remote MACIP delete from BGP. */
 void process_remote_macip_del(vni_t vni, struct ethaddr *macaddr,
 			      uint16_t ipa_len, struct ipaddr *ipaddr,
