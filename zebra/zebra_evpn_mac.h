@@ -193,6 +193,7 @@ static inline void zebra_evpn_mac_clear_sync_info(zebra_mac_t *mac)
 
 struct hash *zebra_mac_db_create(const char *desc);
 uint32_t num_valid_macs(zebra_evi_t *zevi);
+uint32_t num_dup_detected_macs(zebra_evi_t *zevi);
 void zevi_deref_ip2mac(zebra_evi_t *zevi, zebra_mac_t *mac);
 zebra_mac_t *zebra_evpn_mac_lookup(zebra_evi_t *zevi, struct ethaddr *mac);
 zebra_mac_t *zebra_evpn_mac_add(zebra_evi_t *zevi, struct ethaddr *macaddr);
@@ -245,6 +246,9 @@ void zebra_evpn_sync_mac_del(zebra_mac_t *mac);
 void zebra_evpn_mac_send_add_del_to_client(zebra_mac_t *mac, bool old_bgp_ready,
 					   bool new_bgp_ready);
 void zebra_evpn_rem_mac_del(zebra_evi_t *zevi, zebra_mac_t *mac);
+void zevi_print_dad_mac_hash(struct hash_bucket *bucket, void *ctxt);
+void zevi_print_mac_hash_all_vni(struct hash_bucket *bucket, void *ctxt);
+void zevi_print_mac_hash_all_vni_detail(struct hash_bucket *bucket, void *ctxt);
 
 #ifdef __cplusplus
 }
