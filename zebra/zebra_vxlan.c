@@ -160,9 +160,6 @@ static void zebra_vxlan_sg_deref(struct in_addr local_vtep_ip,
 static void zebra_vxlan_sg_ref(struct in_addr local_vtep_ip,
 				struct in_addr mcast_grp);
 static void zebra_vxlan_sg_cleanup(struct hash_bucket *bucket, void *arg);
-/* REMOVE PJDR */
-void zebra_vxlan_mac_get_access_info(zebra_mac_t *mac, struct interface **ifpP,
-				     vlanid_t *vid);
 
 /* Private functions */
 static int host_rb_entry_compare(const struct host_rb_entry *hle1,
@@ -312,32 +309,6 @@ static void zl3vni_print_rmac(zebra_mac_t *zrmac, struct vty *vty,
 				json_object_new_string(prefix2str(
 					&hle->p, buf2, sizeof(buf2))));
 		json_object_object_add(json, "prefixList", json_hosts);
-	}
-}
-
-void zebra_vxlan_mac_get_access_info(zebra_mac_t *mac, struct interface **ifpP,
-				     vlanid_t *vid)
-{
-	/* if the mac is associated with an ES we must get the access
-	 * info from the ES
-	 */
-	if (mac->es) {
-		struct zebra_if *zif;
-
-		/* get the access port from the es */
-		*ifpP = mac->es->zif ? mac->es->zif->ifp : NULL;
-		/* get the vlan from the VNI */
-		if (mac->zevi->vxlan_if) {
-			zif = mac->zevi->vxlan_if->info;
-			*vid = zif->l2info.vxl.access_vlan;
-		}
-	} else {
-		struct zebra_ns *zns;
-
-		*vid = mac->fwd_info.local.vid;
-		zns = zebra_ns_lookup(NS_DEFAULT);
-		*ifpP = if_lookup_by_index_per_ns(zns,
-						  mac->fwd_info.local.ifindex);
 	}
 }
 
@@ -1384,115 +1355,6 @@ static struct interface *zevi_map_to_macvlan(struct interface *br_if,
 	}
 
 	return found ? tmp_if : NULL;
-}
-
-
-/*
- * Install remote MAC into the forwarding plane.
- */
-int zevi_rem_mac_install(zebra_evi_t *zevi, zebra_mac_t *mac, bool was_static)
-{
-	const struct zebra_if *zif, *br_zif;
-	const struct zebra_l2info_vxlan *vxl;
-	bool sticky;
-	enum zebra_dplane_result res;
-	const struct interface *br_ifp;
-	vlanid_t vid;
-	uint32_t nhg_id;
-	struct in_addr vtep_ip;
-
-	if (!(mac->flags & ZEBRA_MAC_REMOTE))
-		return 0;
-
-	zif = zevi->vxlan_if->info;
-	if (!zif)
-		return -1;
-
-	br_ifp = zif->brslave_info.br_if;
-	if (br_ifp == NULL)
-		return -1;
-
-	vxl = &zif->l2info.vxl;
-
-	sticky = !!CHECK_FLAG(mac->flags,
-			 (ZEBRA_MAC_STICKY | ZEBRA_MAC_REMOTE_DEF_GW));
-
-	/* If nexthop group for the FDB entry is inactive (not programmed in
-	 * the dataplane) the MAC entry cannot be installed
-	 */
-	if (mac->es) {
-		if (!(mac->es->flags & ZEBRA_EVPNES_NHG_ACTIVE))
-			return -1;
-		nhg_id = mac->es->nhg_id;
-		vtep_ip.s_addr = 0;
-	} else {
-		nhg_id = 0;
-		vtep_ip = mac->fwd_info.r_vtep_ip;
-	}
-
-	br_zif = (const struct zebra_if *)(br_ifp->info);
-
-	if (IS_ZEBRA_IF_BRIDGE_VLAN_AWARE(br_zif))
-		vid = vxl->access_vlan;
-	else
-		vid = 0;
-
-	res = dplane_rem_mac_add(zevi->vxlan_if, br_ifp, vid, &mac->macaddr,
-				 vtep_ip, sticky, nhg_id, was_static);
-	if (res != ZEBRA_DPLANE_REQUEST_FAILURE)
-		return 0;
-	else
-		return -1;
-}
-
-/*
- * Uninstall remote MAC from the forwarding plane.
- */
-int zevi_rem_mac_uninstall(zebra_evi_t *zevi, zebra_mac_t *mac)
-{
-	const struct zebra_if *zif, *br_zif;
-	const struct zebra_l2info_vxlan *vxl;
-	struct in_addr vtep_ip;
-	const struct interface *ifp, *br_ifp;
-	vlanid_t vid;
-	enum zebra_dplane_result res;
-
-	if (!(mac->flags & ZEBRA_MAC_REMOTE))
-		return 0;
-
-	if (!zevi->vxlan_if) {
-		if (IS_ZEBRA_DEBUG_VXLAN)
-			zlog_debug(
-				"VNI %u hash %p couldn't be uninstalled - no intf",
-				zevi->vni, zevi);
-		return -1;
-	}
-
-	zif = zevi->vxlan_if->info;
-	if (!zif)
-		return -1;
-
-	br_ifp = zif->brslave_info.br_if;
-	if (br_ifp == NULL)
-		return -1;
-
-	vxl = &zif->l2info.vxl;
-
-	br_zif = (const struct zebra_if *)br_ifp->info;
-
-	if (IS_ZEBRA_IF_BRIDGE_VLAN_AWARE(br_zif))
-		vid = vxl->access_vlan;
-	else
-		vid = 0;
-
-	ifp = zevi->vxlan_if;
-	vtep_ip = mac->fwd_info.r_vtep_ip;
-
-	res = dplane_rem_mac_del(ifp, br_ifp, vid, &mac->macaddr, vtep_ip);
-	if (res != ZEBRA_DPLANE_REQUEST_FAILURE)
-		return 0;
-	else
-		return -1;
 }
 
 /*
