@@ -60,8 +60,8 @@ DEFINE_MTYPE_STATIC(ZEBRA, HOST_PREFIX, "host prefix");
 DEFINE_MTYPE_STATIC(ZEBRA, ZEVI, "VNI hash");
 DEFINE_MTYPE_STATIC(ZEBRA, ZL3VNI, "L3 VNI hash");
 DEFINE_MTYPE_STATIC(ZEBRA, ZEVI_VTEP, "VNI remote VTEP");
-DEFINE_MTYPE_STATIC(ZEBRA, MAC, "VNI MAC");
-DEFINE_MTYPE_STATIC(ZEBRA, NEIGH, "VNI Neighbor");
+DEFINE_MTYPE_STATIC(ZEBRA, L3VNI_MAC, "L3VNI MAC");
+DEFINE_MTYPE_STATIC(ZEBRA, L3VNI_NEIGH, "L3VNI Neighbor");
 DEFINE_MTYPE_STATIC(ZEBRA, ZVXLAN_SG, "zebra VxLAN multicast group");
 
 DEFINE_HOOK(zebra_rmac_update, (zebra_mac_t *rmac, zebra_l3vni_t *zl3vni,
@@ -2017,7 +2017,7 @@ static void *zl3vni_rmac_alloc(void *p)
 	const zebra_mac_t *tmp_rmac = p;
 	zebra_mac_t *zrmac;
 
-	zrmac = XCALLOC(MTYPE_MAC, sizeof(zebra_mac_t));
+	zrmac = XCALLOC(MTYPE_L3VNI_MAC, sizeof(zebra_mac_t));
 	*zrmac = *tmp_rmac;
 
 	return ((void *)zrmac);
@@ -2060,7 +2060,7 @@ static int zl3vni_rmac_del(zebra_l3vni_t *zl3vni, zebra_mac_t *zrmac)
 	}
 
 	tmp_rmac = hash_release(zl3vni->rmac_table, zrmac);
-	XFREE(MTYPE_MAC, tmp_rmac);
+	XFREE(MTYPE_L3VNI_MAC, tmp_rmac);
 
 	return 0;
 }
@@ -2255,7 +2255,7 @@ static void *zl3vni_nh_alloc(void *p)
 	const zebra_neigh_t *tmp_n = p;
 	zebra_neigh_t *n;
 
-	n = XCALLOC(MTYPE_NEIGH, sizeof(zebra_neigh_t));
+	n = XCALLOC(MTYPE_L3VNI_NEIGH, sizeof(zebra_neigh_t));
 	*n = *tmp_n;
 
 	return ((void *)n);
@@ -2300,7 +2300,7 @@ static int zl3vni_nh_del(zebra_l3vni_t *zl3vni, zebra_neigh_t *n)
 	}
 
 	tmp_n = hash_release(zl3vni->nh_table, n);
-	XFREE(MTYPE_NEIGH, tmp_n);
+	XFREE(MTYPE_L3VNI_NEIGH, tmp_n);
 
 	return 0;
 }
