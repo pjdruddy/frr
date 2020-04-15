@@ -41,8 +41,6 @@
 #include "zebra/zebra_evpn_mh.h"
 #include "zebra/zebra_evpn_neigh.h"
 #include "zebra/zebra_evpn_mac.h"
-/* PJDR remove */
-#include "zebra/zebra_vxlan_private.h"
 
 DEFINE_MTYPE_STATIC(ZEBRA, NEIGH, "EVI Neighbor");
 

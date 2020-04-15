@@ -120,6 +120,9 @@ void process_remote_macip_add(vni_t vni, struct ethaddr *macaddr,
 void process_remote_macip_del(vni_t vni, struct ethaddr *macaddr,
 			      uint16_t ipa_len, struct ipaddr *ipaddr,
 			      struct in_addr vtep_ip);
+struct interface *zevi_map_to_svi(zebra_evi_t *zevi);
+int advertise_gw_macip_enabled(zebra_evi_t *zevi);
+int advertise_svi_macip_enabled(zebra_evi_t *zevi);
 
 #ifdef __cplusplus
 }
