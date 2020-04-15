@@ -112,6 +112,14 @@ struct zebra_evi_t_ {
 };
 
 extern zebra_evi_t *zevi_lookup(vni_t vni);
+void process_remote_macip_add(vni_t vni, struct ethaddr *macaddr,
+			      uint16_t ipa_len, struct ipaddr *ipaddr,
+			      uint8_t flags, uint32_t seq,
+			      struct in_addr vtep_ip, esi_t *esi);
+
+void process_remote_macip_del(vni_t vni, struct ethaddr *macaddr,
+			      uint16_t ipa_len, struct ipaddr *ipaddr,
+			      struct in_addr vtep_ip);
 
 #ifdef __cplusplus
 }

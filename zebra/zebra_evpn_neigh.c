@@ -2313,7 +2313,7 @@ void zevi_print_neigh_hash_all_evi_detail(struct hash_bucket *bucket,
 void process_neigh_remote_macip_add(zebra_evi_t *zevi, struct zebra_vrf *zvrf,
 				    struct ipaddr *ipaddr, zebra_mac_t *mac,
 				    struct in_addr vtep_ip, uint8_t flags,
-				    uint32_t seq, bool is_router)
+				    uint32_t seq)
 {
 	zebra_neigh_t *n;
 	int update_neigh = 0;
@@ -2324,6 +2324,9 @@ void process_neigh_remote_macip_add(zebra_evi_t *zevi, struct zebra_vrf *zvrf,
 	bool old_static = false;
 	bool do_dad = false;
 	bool is_dup_detect = false;
+	bool is_router;
+
+	is_router = !!CHECK_FLAG(flags, ZEBRA_MACIP_TYPE_ROUTER_FLAG);
 
 	/* Check if the remote neighbor itself is unknown or has a
 	 * change. If so, create or update and then install the entry.

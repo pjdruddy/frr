@@ -198,7 +198,7 @@ void zevi_print_neigh_hash_all_evi(struct hash_bucket *bucket, void **args);
 void process_neigh_remote_macip_add(zebra_evi_t *zevi, struct zebra_vrf *zvrf,
 				    struct ipaddr *ipaddr, zebra_mac_t *mac,
 				    struct in_addr vtep_ip, uint8_t flags,
-				    uint32_t seq, bool is_router);
+				    uint32_t seq);
 int zebra_evpn_neigh_gw_macip_add(struct interface *ifp, zebra_evi_t *zevi,
 				  struct ipaddr *ip, zebra_mac_t *mac);
 

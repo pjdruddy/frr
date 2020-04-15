@@ -931,7 +931,6 @@ static int zevi_advertise_subnet(zebra_evi_t *zevi, struct interface *ifp,
 static int zevi_gw_macip_add(struct interface *ifp, zebra_evi_t *zevi,
 			     struct ethaddr *macaddr, struct ipaddr *ip)
 {
-	char buf[ETHER_ADDR_STRLEN];
 	zebra_mac_t *mac = NULL;
 	struct zebra_if *zif = NULL;
 	struct zebra_l2info_vxlan *vxl = NULL;
@@ -943,25 +942,11 @@ static int zevi_gw_macip_add(struct interface *ifp, zebra_evi_t *zevi,
 	vxl = &zif->l2info.vxl;
 
 	mac = zebra_evpn_mac_lookup(zevi, macaddr);
-	if (!mac) {
-		mac = zebra_evpn_mac_add(zevi, macaddr);
-		if (!mac) {
-			flog_err(EC_ZEBRA_MAC_ADD_FAILED,
-				 "Failed to add MAC %s intf %s(%u) VID %u",
-				 prefix_mac2str(macaddr, buf, sizeof(buf)),
-				 ifp->name, ifp->ifindex, vxl->access_vlan);
-			return -1;
-		}
-	}
 
-	/* Set "local" forwarding info. */
-	SET_FLAG(mac->flags, ZEBRA_MAC_LOCAL);
-	SET_FLAG(mac->flags, ZEBRA_MAC_AUTO);
-	SET_FLAG(mac->flags, ZEBRA_MAC_DEF_GW);
-	memset(&mac->fwd_info, 0, sizeof(mac->fwd_info));
-	mac->fwd_info.local.ifindex = ifp->ifindex;
-	mac->fwd_info.local.vid = vxl->access_vlan;
-
+	if (zebra_evpn_mac_gw_macip_add(ifp, zevi, ip, mac, macaddr,
+					vxl->access_vlan)
+	    != 0)
+		return -1;
 
 	return zebra_evpn_neigh_gw_macip_add(ifp, zevi, ip, mac);
 }
@@ -3185,20 +3170,9 @@ void process_remote_macip_add(vni_t vni, struct ethaddr *macaddr,
 	zebra_evi_t *zevi;
 	zebra_vtep_t *zvtep;
 	zebra_mac_t *mac = NULL;
-	int update_mac = 0;
-	char buf[ETHER_ADDR_STRLEN];
-	char buf1[INET6_ADDRSTRLEN];
 	struct interface *ifp = NULL;
 	struct zebra_if *zif = NULL;
 	struct zebra_vrf *zvrf;
-	uint32_t tmp_seq;
-	bool sticky;
-	bool remote_gw;
-	bool is_router;
-	bool do_dad = false;
-	bool is_dup_detect = false;
-	esi_t *old_esi;
-	bool old_static = false;
 
 	/* Locate VNI hash entry - expected to exist. */
 	zevi = zevi_lookup(vni);
@@ -3251,170 +3225,20 @@ void process_remote_macip_add(vni_t vni, struct ethaddr *macaddr,
 		}
 	}
 
-	sticky = !!CHECK_FLAG(flags, ZEBRA_MACIP_TYPE_STICKY);
-	remote_gw = !!CHECK_FLAG(flags, ZEBRA_MACIP_TYPE_GW);
-	is_router = !!CHECK_FLAG(flags, ZEBRA_MACIP_TYPE_ROUTER_FLAG);
-
-	mac = zebra_evpn_mac_lookup(zevi, macaddr);
-
-	/* Ignore if the mac is already present as a gateway mac */
-	if (mac &&
-	    CHECK_FLAG(mac->flags, ZEBRA_MAC_DEF_GW) &&
-	    CHECK_FLAG(flags, ZEBRA_MACIP_TYPE_GW)) {
-		if (IS_ZEBRA_DEBUG_VXLAN)
-			zlog_debug("Ignore remote MACIP ADD VNI %u MAC %s%s%s as MAC is already configured as gateway MAC",
-				   vni,
-				   prefix_mac2str(macaddr, buf, sizeof(buf)),
-				   ipa_len ? " IP " : "",
-				   ipa_len ?
-				   ipaddr2str(ipaddr, buf1, sizeof(buf1)) : "");
-		return;
-	}
 
 	zvrf = vrf_info_lookup(zevi->vxlan_if->vrf_id);
 	if (!zvrf)
 		return;
 
-	old_esi = (mac && mac->es) ? &mac->es->esi : zero_esi;
+	mac = zebra_evpn_mac_lookup(zevi, macaddr);
 
-	/* check if the remote MAC is unknown or has a change.
-	 * If so, that needs to be updated first. Note that client could
-	 * install MAC and MACIP separately or just install the latter.
-	 */
-	if (!mac
-	    || !CHECK_FLAG(mac->flags, ZEBRA_MAC_REMOTE)
-	    || sticky != !!CHECK_FLAG(mac->flags, ZEBRA_MAC_STICKY)
-	    || remote_gw != !!CHECK_FLAG(mac->flags, ZEBRA_MAC_REMOTE_DEF_GW)
-	    || !IPV4_ADDR_SAME(&mac->fwd_info.r_vtep_ip, &vtep_ip)
-	    || memcmp(old_esi, esi, sizeof(esi_t))
-	    || seq != mac->rem_seq)
-		update_mac = 1;
-
-	if (update_mac) {
-		if (!mac) {
-			mac = zebra_evpn_mac_add(zevi, macaddr);
-			if (!mac) {
-				zlog_warn(
-					"Failed to add MAC %s VNI %u Remote VTEP %s",
-					prefix_mac2str(macaddr, buf,
-						       sizeof(buf)),
-					vni, inet_ntoa(vtep_ip));
-				return;
-			}
-
-			zebra_evpn_es_mac_ref(mac, esi);
-
-			/* Is this MAC created for a MACIP? */
-			if (ipa_len)
-				SET_FLAG(mac->flags, ZEBRA_MAC_AUTO);
-		} else {
-			zebra_evpn_es_mac_ref(mac, esi);
-
-			/* When host moves but changes its (MAC,IP)
-			 * binding, BGP may install a MACIP entry that
-			 * corresponds to "older" location of the host
-			 * in transient situations (because {IP1,M1}
-			 * is a different route from {IP1,M2}). Check
-			 * the sequence number and ignore this update
-			 * if appropriate.
-			 */
-			if (CHECK_FLAG(mac->flags, ZEBRA_MAC_LOCAL))
-				tmp_seq = mac->loc_seq;
-			else
-				tmp_seq = mac->rem_seq;
-
-			if (seq < tmp_seq) {
-				if (IS_ZEBRA_DEBUG_VXLAN)
-					zlog_debug("Ignore remote MACIP ADD VNI %u MAC %s%s%s as existing MAC has higher seq %u flags 0x%x",
-					vni,
-					prefix_mac2str(macaddr,
-						       buf, sizeof(buf)),
-					ipa_len ? " IP " : "",
-					ipa_len ?
-					ipaddr2str(ipaddr,
-						   buf1, sizeof(buf1)) : "",
-					tmp_seq, mac->flags);
-				return;
-			}
-		}
-
-		/* Check MAC's curent state is local (this is the case
-		 * where MAC has moved from L->R) and check previous
-		 * detection started via local learning.
-		 * RFC-7432: A PE/VTEP that detects a MAC mobility
-		 * event via local learning starts an M-second timer.
-		 *
-		 * VTEP-IP or seq. change alone is not considered
-		 * for dup. detection.
-		 *
-		 * MAC is already marked duplicate set dad, then
-		 * is_dup_detect will be set to not install the entry.
-		 */
-		if ((!CHECK_FLAG(mac->flags, ZEBRA_MAC_REMOTE) &&
-		    mac->dad_count) ||
-		    CHECK_FLAG(mac->flags, ZEBRA_MAC_DUPLICATE))
-			do_dad = true;
-
-		/* Remove local MAC from BGP. */
-		if (CHECK_FLAG(mac->flags, ZEBRA_MAC_LOCAL)) {
-			/* force drop the sync flags */
-			old_static = zebra_evpn_mac_is_static(mac);
-			if (IS_ZEBRA_DEBUG_EVPN_MH_MAC)
-				zlog_debug(
-					"sync-mac->remote vni %u mac %s es %s seq %d f 0x%x",
-					zevi->vni,
-					prefix_mac2str(macaddr, buf,
-						       sizeof(buf)),
-					mac->es ? mac->es->esi_str : "-",
-					mac->loc_seq, mac->flags);
-			zebra_evpn_mac_clear_sync_info(mac);
-			zevi_mac_send_del_to_client(zevi->vni, macaddr,
-						    mac->flags,
-						    false /* force */);
-		}
-
-		/* Set "auto" and "remote" forwarding info. */
-		UNSET_FLAG(mac->flags, ZEBRA_MAC_ALL_LOCAL_FLAGS);
-		memset(&mac->fwd_info, 0, sizeof(mac->fwd_info));
-		SET_FLAG(mac->flags, ZEBRA_MAC_REMOTE);
-		mac->fwd_info.r_vtep_ip = vtep_ip;
-
-		if (sticky)
-			SET_FLAG(mac->flags, ZEBRA_MAC_STICKY);
-		else
-			UNSET_FLAG(mac->flags, ZEBRA_MAC_STICKY);
-
-		if (remote_gw)
-			SET_FLAG(mac->flags, ZEBRA_MAC_REMOTE_DEF_GW);
-		else
-			UNSET_FLAG(mac->flags, ZEBRA_MAC_REMOTE_DEF_GW);
-
-		zebra_evpn_dup_addr_detect_for_mac(
-			zvrf, mac, mac->fwd_info.r_vtep_ip, do_dad,
-			&is_dup_detect, false);
-
-		if (!is_dup_detect) {
-			zevi_process_neigh_on_remote_mac_add(zevi, mac);
-			/* Install the entry. */
-			zevi_rem_mac_install(zevi, mac, old_static);
-		}
-	}
-
-	/* Update seq number. */
-	mac->rem_seq = seq;
-
-	/* If there is no IP, return after clearing AUTO flag of MAC. */
-	if (!ipa_len) {
-		UNSET_FLAG(mac->flags, ZEBRA_MAC_AUTO);
+	if (process_mac_remote_macip_add(zevi, zvrf, ipa_len, ipaddr, mac,
+					 vtep_ip, flags, seq, esi)
+	    != 0)
 		return;
-	}
-
-	/* Reset flag */
-	do_dad = false;
-	old_static = false;
 
 	process_neigh_remote_macip_add(zevi, zvrf, ipaddr, mac, vtep_ip, flags,
-				       seq, is_router);
+				       seq);
 }
 
 /* Process a remote MACIP delete from BGP. */

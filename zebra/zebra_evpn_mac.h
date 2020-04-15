@@ -203,23 +203,13 @@ int zebra_evpn_macip_send_msg_to_client(uint32_t id, struct ethaddr *macaddr,
 					uint32_t seq, int state,
 					struct zebra_evpn_es *es, uint16_t cmd);
 void zebra_evpn_print_mac(zebra_mac_t *mac, void *ctxt, json_object *json);
-void zebra_evpn_print_mac_hash_detail(struct hash_bucket *bucket, void *ctxt);
 void zebra_evpn_print_mac_hash(struct hash_bucket *bucket, void *ctxt);
-
 void zebra_evpn_sync_mac_dp_install(zebra_mac_t *mac, bool set_inactive,
 				    bool force_clear_static,
 				    const char *caller);
 
 void zevi_mac_del_all(zebra_evi_t *zevi, int uninstall, int upd_client,
 		      uint32_t flags);
-void process_remote_macip_add(vni_t vni, struct ethaddr *macaddr,
-			      uint16_t ipa_len, struct ipaddr *ipaddr,
-			      uint8_t flags, uint32_t seq,
-			      struct in_addr vtep_ip, esi_t *esi);
-void process_remote_macip_del(vni_t vni, struct ethaddr *macaddr,
-			      uint16_t ipa_len, struct ipaddr *ipaddr,
-			      struct in_addr vtep_ip);
-
 int zebra_evpn_add_update_local_mac(struct zebra_vrf *zvrf, zebra_evi_t *zevi,
 				    struct interface *ifp,
 				    struct ethaddr *macaddr, vlanid_t vid,
@@ -238,17 +228,18 @@ zebra_evpn_proc_sync_mac_update(zebra_evi_t *zevi, struct ethaddr *macaddr,
 				uint16_t ipa_len, struct ipaddr *ipaddr,
 				uint8_t flags, uint32_t seq, esi_t *esi,
 				struct sync_mac_ip_ctx *ctx);
-void zebra_evpn_dup_addr_detect_for_mac(struct zebra_vrf *zvrf,
-					zebra_mac_t *mac,
-					struct in_addr vtep_ip, bool do_dad,
-					bool *is_dup_detect, bool is_local);
 void zebra_evpn_sync_mac_del(zebra_mac_t *mac);
-void zebra_evpn_mac_send_add_del_to_client(zebra_mac_t *mac, bool old_bgp_ready,
-					   bool new_bgp_ready);
 void zebra_evpn_rem_mac_del(zebra_evi_t *zevi, zebra_mac_t *mac);
 void zevi_print_dad_mac_hash(struct hash_bucket *bucket, void *ctxt);
 void zevi_print_mac_hash_all_vni(struct hash_bucket *bucket, void *ctxt);
 void zevi_print_mac_hash_all_vni_detail(struct hash_bucket *bucket, void *ctxt);
+int process_mac_remote_macip_add(zebra_evi_t *zevi, struct zebra_vrf *zvrf,
+				 uint16_t ipa_len, struct ipaddr *ipaddr,
+				 zebra_mac_t *mac, struct in_addr vtep_ip,
+				 uint8_t flags, uint32_t seq, esi_t *esi);
+int zebra_evpn_mac_gw_macip_add(struct interface *ifp, zebra_evi_t *zevi,
+				struct ipaddr *ip, zebra_mac_t *mac,
+				struct ethaddr *macaddr, vlanid_t vlan_id);
 
 #ifdef __cplusplus
 }
