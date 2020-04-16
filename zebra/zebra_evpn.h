@@ -111,7 +111,9 @@ struct zebra_evi_t_ {
 	struct list *local_es_evi_list;
 };
 
-extern zebra_evi_t *zevi_lookup(vni_t vni);
+void *zevi_alloc(void *p);
+zebra_evi_t *zevi_lookup(vni_t vni);
+zebra_evi_t *zevi_add(vni_t vni);
 void process_remote_macip_add(vni_t vni, struct ethaddr *macaddr,
 			      uint16_t ipa_len, struct ipaddr *ipaddr,
 			      uint8_t flags, uint32_t seq,
@@ -123,6 +125,29 @@ void process_remote_macip_del(vni_t vni, struct ethaddr *macaddr,
 struct interface *zevi_map_to_svi(zebra_evi_t *zevi);
 int advertise_gw_macip_enabled(zebra_evi_t *zevi);
 int advertise_svi_macip_enabled(zebra_evi_t *zevi);
+void zevi_evpn_cfg_cleanup(struct hash_bucket *bucket, void *ctxt);
+void zevi_cleanup_all(struct hash_bucket *bucket, void *arg);
+void zevi_handle_flooding_remote_vteps(struct hash_bucket *bucket, void *zvrf);
+int zevi_send_add_to_client(zebra_evi_t *zevi);
+int zevi_send_del_to_client(zebra_evi_t *zevi);
+bool vni_hash_cmp(const void *p1, const void *p2);
+unsigned int vni_hash_keymake(const void *p);
+void zevi_read_mac_neigh(zebra_evi_t *zevi, struct interface *ifp);
+void zevi_install_mac_hash(struct hash_bucket *bucket, void *ctxt);
+struct interface *zevi_map_to_macvlan(struct interface *br_if,
+				      struct interface *svi_if);
+zebra_evi_t *zevi_from_svi(struct interface *ifp, struct interface *br_if);
+zebra_evi_t *zevi_map_vlan(struct interface *ifp, struct interface *br_if,
+			   vlanid_t vid);
+void zevi_svi_macip_del_for_vni_hash(struct hash_bucket *bucket, void *ctxt);
+void zevi_gw_macip_add_for_vni_hash(struct hash_bucket *bucket, void *ctxt);
+void zevi_gw_macip_del_for_vni_hash(struct hash_bucket *bucket, void *ctxt);
+int zevi_advertise_subnet(zebra_evi_t *zevi, struct interface *ifp,
+			  int advertise);
+void zevi_print_hash_detail(struct hash_bucket *bucket, void *data);
+void zevi_print_hash(struct hash_bucket *bucket, void *ctxt[]);
+void zevi_print(zebra_evi_t *zevi, void **ctxt);
+void zevi_install_mac_hash(struct hash_bucket *bucket, void *ctxt);
 
 #ifdef __cplusplus
 }

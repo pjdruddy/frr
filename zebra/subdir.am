@@ -73,6 +73,7 @@ zebra_zebra_SOURCES = \
 	zebra/rtread_sysctl.c \
 	zebra/rule_netlink.c \
 	zebra/rule_socket.c \
+	zebra/zebra_evpn.c \
 	zebra/zebra_evpn_mac.c \
 	zebra/zebra_evpn_neigh.c \
 	zebra/zebra_mlag.c \

@@ -224,6 +224,10 @@ extern void zebra_evpn_init(void);
 extern void zebra_vxlan_macvlan_up(struct interface *ifp);
 extern void zebra_vxlan_macvlan_down(struct interface *ifp);
 extern int vni_list_cmp(void *p1, void *p2);
+extern struct interface *zebra_get_vrr_intf_for_svi(struct interface *ifp);
+extern struct interface *zvni_map_to_svi(vlanid_t vid, struct interface *br_if);
+extern void zebra_vxlan_sg_deref(struct in_addr local_vtep_ip,
+				 struct in_addr mcast_grp);
 #ifdef __cplusplus
 }
 #endif
