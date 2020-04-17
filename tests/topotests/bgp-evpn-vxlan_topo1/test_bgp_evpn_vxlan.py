@@ -29,6 +29,7 @@ import os
 import sys
 import json
 from functools import partial
+from time import sleep
 import pytest
 
 # Save the Current Working Directory to find configuration files.
@@ -97,6 +98,7 @@ def setup_module(mod):
 
     # set up PE bridges with the EVPN member interfaces facing the CE hosts
     pe1.run("ip link add name br101 type bridge stp_state 0")
+    pe1.run("ip addr add 10.10.1.1/24 dev br101")
     pe1.run("ip link set dev br101 up")
     pe1.run(
         "ip link add vxlan101 type vxlan id 101 dstport 4789 local 10.10.10.10 nolearning"
@@ -106,6 +108,7 @@ def setup_module(mod):
     pe1.run("ip link set dev PE1-eth0 master br101")
 
     pe2.run("ip link add name br101 type bridge stp_state 0")
+    pe2.run("ip addr add 10.10.1.3/24 dev br101")
     pe2.run("ip link set dev br101 up")
     pe2.run(
         "ip link add vxlan101 type vxlan id 101 dstport 4789 local 10.30.30.30 nolearning"
@@ -273,6 +276,77 @@ def test_local_remote_mac_pe2():
     mac_test_local_remote(pe2, pe1)
 
     # Memory leak test template
+
+
+def ip_learn_test(tgen, host, local, remote):
+    "check the host IP gets learned by the VNI"
+    host_output = host.vtysh_cmd("show interface {}-eth0".format(host.name))
+    int_lines = host_output.splitlines()
+    mac_line = int_lines[7].split(": ")
+    mac = mac_line[1]
+    ip_line = int_lines[8].split(" ")
+    ip_addr = ip_line[3].split("/")[0]
+
+    # check we have a local association between the MAC and IP
+    local_output = local.vtysh_cmd("show evpn mac vni 101 mac {} json".format(mac))
+    local_output_json = json.loads(local_output)
+    mac_type = local_output_json[mac]["type"]
+    learned_ip = local_output_json[mac]["neighbors"]["active"][0]
+
+    assertmsg = "local learned mac wrong type: {} ".format(mac_type)
+    assert mac_type == "local"
+
+    assertmsg = "learned address mismatch with configured address host: {} learned: {}".format(
+        ip_addr, learned_ip
+    )
+    assert ip_addr == learned_ip
+
+    # now lets check the remote
+    count = 0
+    while count < 10:
+        remote_output = remote.vtysh_cmd(
+            "show evpn mac vni 101 mac {} json".format(mac)
+        )
+        remote_output_json = json.loads(remote_output)
+        type = remote_output_json[mac]["type"]
+        if not remote_output_json[mac]["neighbors"] == "none":
+            break
+        count += 1
+        sleep(1)
+
+    learned_ip = remote_output_json[mac]["neighbors"]["active"][0]
+    assertmsg = "remote learned mac wrong type: {} ".format(type)
+    assert type == "remote"
+
+    assertmsg = "remote learned address mismatch with configured address host: {} learned: {}".format(
+        ip_addr, learned_ip
+    )
+    assert ip_addr == learned_ip
+
+
+def test_ip_pe1_learn():
+    "run the IP learn test for PE1"
+
+    tgen = get_topogen()
+    host1 = tgen.gears["host1"]
+    pe1 = tgen.gears["PE1"]
+    pe2 = tgen.gears["PE2"]
+    # lets populate that arp cache
+    # tgen.mininet_cli()
+    host1.run("ping -c1 10.10.1.1")
+    ip_learn_test(tgen, host1, pe1, pe2)
+
+
+def test_ip_pe2_learn():
+    "run the IP learn test for PE2"
+
+    tgen = get_topogen()
+    host2 = tgen.gears["host2"]
+    pe1 = tgen.gears["PE1"]
+    pe2 = tgen.gears["PE2"]
+    # lets populate that arp cache
+    host2.run("ping -c1 10.10.1.3")
+    ip_learn_test(tgen, host2, pe2, pe1)
 
 
 def test_memory_leak():
