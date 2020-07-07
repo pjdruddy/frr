@@ -142,6 +142,22 @@ struct zebra_evpn_access_bd {
 /* multihoming information stored in zrouter */
 #define zmh_info (zrouter.mh_info)
 struct zebra_evpn_mh_info {
+	uint32_t flags;
+/* If the dataplane is not capable of handling a backup NHG on an access
+ * port we will need to explicitly failover each MAC entry on
+ * local ES down
+ */
+#define ZEBRA_EVPN_MH_REDIRECT_OFF (1 << 0)
+/* DAD support for EVPN-MH is yet to be added. So on detection of
+ * first local ES, DAD is turned off
+ */
+#define ZEBRA_EVPN_MH_DUP_ADDR_DETECT_OFF (1 << 1)
+/* If EVPN MH is enabled we only advertise REACHABLE neigh entries as Type-2
+ * routes. As there is no global config knob for enabling EVPN MH we turn
+ * this flag when the first local ES is detected.
+ */
+#define ZEBRA_EVPN_MH_ADV_REACHABLE_NEIGH_ONLY (1 << 2)
+
 	/* RB tree of Ethernet segments (used for EVPN-MH)  */
 	struct zebra_es_rb_head es_rb_tree;
 	/* List of local ESs */
@@ -190,6 +206,24 @@ static inline bool zebra_evpn_mh_is_fdb_nh(uint32_t id)
 	return ((id & EVPN_NHG_ID_TYPE_BIT) ||
 			(id & EVPN_NH_ID_TYPE_BIT));
 }
+
+static inline bool
+zebra_evpn_es_local_mac_via_network_port(struct zebra_evpn_es *es)
+{
+	return !(es->flags & ZEBRA_EVPNES_OPER_UP)
+	       && (zmh_info->flags & ZEBRA_EVPN_MH_REDIRECT_OFF);
+}
+
+static inline bool zebra_evpn_mh_do_dup_addr_detect(void)
+{
+	return !(zmh_info->flags & ZEBRA_EVPN_MH_DUP_ADDR_DETECT_OFF);
+}
+
+static inline bool zebra_evpn_mh_do_adv_reachable_neigh_only(void)
+{
+	return !!(zmh_info->flags & ZEBRA_EVPN_MH_ADV_REACHABLE_NEIGH_ONLY);
+}
+
 
 /*****************************************************************************/
 extern esi_t *zero_esi;
