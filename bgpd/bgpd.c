@@ -3326,6 +3326,8 @@ int bgp_handle_socket(struct bgp *bgp, struct vrf *vrf, vrf_id_t old_vrf_id,
 	if (!bgp || bgp_option_check(BGP_OPT_NO_LISTEN))
 		return 0;
 	if (bgp->inst_type == BGP_INSTANCE_TYPE_VRF) {
+		struct interface *ifp;
+
 		/*
 		 * suppress vrf socket
 		 */
@@ -3349,6 +3351,21 @@ int bgp_handle_socket(struct bgp *bgp, struct vrf *vrf, vrf_id_t old_vrf_id,
 		 */
 		if (vrf->vrf_id == VRF_UNKNOWN)
 			return 0;
+
+		/* If we are using l3mdevs for VRFs, make sure the l3mdev
+		 * exists for the VRF before attempting to create the socket,
+		 * otherwise the socket bind to the device will silently fail
+		 * leaving the socket bound to the default VRF.
+		 * If the l3mdev does not exist, return early. The socket will
+		 * be created when we get notification from zebra that the
+		 * l3mdev interface has been created.
+		 */
+		if (!vrf_is_backend_netns()) {
+			ifp = if_lookup_by_name(vrf->name, vrf->vrf_id);
+			if (!ifp)
+				return 0;
+		}
+
 		if (list_isempty(bm->addresses)) {
 			if (bgp_socket(bgp, bm->port, NULL) < 0)
 				return BGP_ERR_INVALID_VALUE;

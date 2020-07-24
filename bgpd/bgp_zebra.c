@@ -63,6 +63,7 @@
 #include "bgpd/bgp_evpn_private.h"
 #include "bgpd/bgp_evpn_mh.h"
 #include "bgpd/bgp_mac.h"
+#include "bgpd/bgp_network.h"
 
 /* All information about zebra. */
 struct zclient *zclient = NULL;
@@ -2961,6 +2962,15 @@ static int bgp_ifp_create(struct interface *ifp)
 	bgp = bgp_lookup_by_vrf_id(ifp->vrf_id);
 	if (!bgp)
 		return 0;
+
+	/*
+	 * if this is a l3mdev then trigger creation of any dependent
+	 * listener sockets, if (of course) we are using l3mdevs for
+	 * VRFs
+	 */
+	if (ifp->vrf_id != VRF_DEFAULT && !vrf_is_backend_netns())
+		if (strncmp(bgp->name, ifp->name, IF_NAMESIZE) == 0)
+			bgp_update_listener_bind(bgp);
 
 	bgp_mac_add_mac_entry(ifp);
 
