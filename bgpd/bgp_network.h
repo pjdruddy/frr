@@ -37,5 +37,6 @@ extern int bgp_md5_unset_prefix(struct bgp *bgp, struct prefix *p);
 extern int bgp_md5_set(struct peer *);
 extern int bgp_md5_unset(struct peer *);
 extern int bgp_set_socket_ttl(struct peer *, int fd);
+void bgp_update_listener_bind(struct bgp *bgp);
 
 #endif /* _QUAGGA_BGP_NETWORK_H */

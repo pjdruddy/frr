@@ -831,6 +831,51 @@ static int bgp_listener(int sock, struct sockaddr *sa, socklen_t salen,
 	return 0;
 }
 
+void bgp_update_listener_bind(struct bgp *bgp)
+{
+	struct listnode *node, *next, *nnode;
+	struct bgp_listener *listener;
+	struct peer *peer;
+	struct peer_group *group;
+	struct prefix *prefix;
+	afi_t afi;
+	int ret;
+
+	/* check to see if we already created the listener */
+	for (ALL_LIST_ELEMENTS(bm->listen_sockets, node, next, listener)) {
+		if (listener->bgp == bgp)
+			return;
+	}
+	/* no listeners created - do so now */
+	ret = bgp_socket(bgp, bm->port, bm->address);
+	if (ret < 0)
+		zlog_err("Failed to bind listener for vrf %s", bgp->name);
+
+	for (ALL_LIST_ELEMENTS(bm->listen_sockets, node, next, listener)) {
+		if (listener->bgp == bgp)
+			break;
+	}
+
+	/* run through the peers and execute any md5 config */
+	for (ALL_LIST_ELEMENTS(bgp->peer, node, nnode, peer))
+		if (CHECK_FLAG(peer->flags, PEER_FLAG_PASSWORD)) {
+			bgp_md5_set(peer);
+		}
+	/* run through groups and execute any md5 config */
+	for (ALL_LIST_ELEMENTS(bgp->group, node, next, group)) {
+		if (CHECK_FLAG(group->conf->flags, PEER_FLAG_PASSWORD)) {
+			for (afi = AFI_IP; afi < AFI_MAX; afi++)
+				for (ALL_LIST_ELEMENTS(group->listen_range[afi],
+						       node, nnode, prefix)) {
+
+					bgp_md5_set_prefix(
+						group->bgp, prefix,
+						group->conf->password);
+				}
+		}
+	}
+}
+
 /* IPv6 supported version of BGP server socket setup.  */
 int bgp_socket(struct bgp *bgp, unsigned short port, const char *address)
 {
