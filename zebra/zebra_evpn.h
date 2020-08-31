@@ -81,6 +81,7 @@ struct zebra_vtep_t_ {
 struct zebra_evpn_t_ {
 	/* VNI - key */
 	vni_t vni;
+	char name[VRF_NAMSIZ];
 
 	/* ES flags */
 	uint32_t flags;

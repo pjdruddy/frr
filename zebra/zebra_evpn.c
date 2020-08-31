@@ -979,6 +979,9 @@ void *zebra_evpn_alloc(void *p)
 
 	zevpn = XCALLOC(MTYPE_ZEVPN, sizeof(zebra_evpn_t));
 	zevpn->vni = tmp_vni->vni;
+	/* auto-generate name from vni */
+	snprintf(zevpn->name, VRF_NAMSIZ, "VNI-%d", zevpn->vni);
+
 	return ((void *)zevpn);
 }
 
