@@ -68,7 +68,7 @@ esi_t zero_esi_buf, *zero_esi = &zero_esi_buf;
 
 /*****************************************************************************/
 /* Ethernet Segment to EVI association -
- * 1. The ES-EVI entry is maintained as a RB tree per L2-VNI
+ * 1. The ES-EVI entry is maintained as a RB tree per L2-EVPN
  * (zebra_evpn_t.es_evi_rb_tree).
  * 2. Each local ES-EVI entry is sent to BGP which advertises it as an
  * EAD-EVI (Type-1 EVPN) route
@@ -77,7 +77,7 @@ esi_t zero_esi_buf, *zero_esi = &zero_esi_buf;
  *    b. When an access port associated with an ESI is deleted.
  *    c. When VLAN member ship changes on an access port.
  *    d. When a VXLAN_IF is set or cleared on an access broadcast domain.
- *    e. When a L2-VNI is added or deleted for a VxLAN_IF.
+ *    e. When a L2-EVPN is added or deleted for a VxLAN_IF.
  * 4. Currently zebra doesn't remote ES-EVIs. Those are managed and maintained
  * entirely in BGP which consolidates them into a remote ES. The remote ES
  * is then sent to zebra which allocates a NHG for it.
@@ -92,7 +92,7 @@ static int zebra_es_evi_rb_cmp(const struct zebra_evpn_es_evi *es_evi1,
 RB_GENERATE(zebra_es_evi_rb_head, zebra_evpn_es_evi,
 		rb_node, zebra_es_evi_rb_cmp);
 
-/* allocate a new ES-EVI and insert it into the per-L2-VNI and per-ES
+/* allocate a new ES-EVI and insert it into the per-L2-EVPN and per-ES
  * tables.
  */
 static struct zebra_evpn_es_evi *zebra_evpn_es_evi_new(struct zebra_evpn_es *es,
@@ -111,13 +111,13 @@ static struct zebra_evpn_es_evi *zebra_evpn_es_evi_new(struct zebra_evpn_es *es,
 		return NULL;
 	}
 
-	/* add to the ES's VNI list */
+	/* add to the ES's EVPN list */
 	listnode_init(&es_evi->es_listnode, es_evi);
 	listnode_add(es->es_evi_list, &es_evi->es_listnode);
 
 	if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
-		zlog_debug("es %s evi %d new",
-				es_evi->es->esi_str, es_evi->zevpn->vni);
+		zlog_debug("es %s evi %s new",
+				es_evi->es->esi_str, es_evi->zevpn->name);
 
 	return es_evi;
 }
@@ -141,7 +141,7 @@ static void zebra_evpn_es_evi_re_eval_send_to_client(
 
 	old_ready = !!(es_evi->flags & ZEBRA_EVPNES_EVI_READY_FOR_BGP);
 
-	/* ES and L2-VNI have to be individually ready for BGP */
+	/* ES and L2-EVPN have to be individually ready for BGP */
 	if ((es_evi->flags & ZEBRA_EVPNES_EVI_LOCAL) &&
 			(es_evi->es->flags & ZEBRA_EVPNES_READY_FOR_BGP) &&
 			zebra_evpn_send_to_client_ok(es_evi->zevpn))
@@ -162,7 +162,7 @@ static void zebra_evpn_es_evi_re_eval_send_to_client(
 				false /* add */);
 }
 
-/* remove the ES-EVI from the per-L2-VNI and per-ES tables and free
+/* remove the ES-EVI from the per-L2-EVPN and per-ES tables and free
  * up the memory.
  */
 static void zebra_evpn_es_evi_free(struct zebra_evpn_es_evi *es_evi)
@@ -171,20 +171,20 @@ static void zebra_evpn_es_evi_free(struct zebra_evpn_es_evi *es_evi)
 	zebra_evpn_t *zevpn = es_evi->zevpn;
 
 	if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
-		zlog_debug("es %s evi %d free",
-				es_evi->es->esi_str, es_evi->zevpn->vni);
+		zlog_debug("es %s evi %s free",
+				es_evi->es->esi_str, es_evi->zevpn->name);
 
-	/* remove from the ES's VNI list */
+	/* remove from the ES's EVPN list */
 	list_delete_node(es->es_evi_list, &es_evi->es_listnode);
 
-	/* remove from the VNI-ESI rb tree */
+	/* remove from the EVPN-ESI rb tree */
 	RB_REMOVE(zebra_es_evi_rb_head, &zevpn->es_evi_rb_tree, es_evi);
 
-	/* remove from the VNI-ESI rb tree */
+	/* remove from the EVPN-ESI rb tree */
 	XFREE(MTYPE_ZES_EVI, es_evi);
 }
 
-/* find the ES-EVI in the per-L2-VNI RB tree */
+/* find the ES-EVI in the per-L2-EVPN RB tree */
 static struct zebra_evpn_es_evi *zebra_evpn_es_evi_find(
 		struct zebra_evpn_es *es, zebra_evpn_t *zevpn)
 {
@@ -202,8 +202,8 @@ static void zebra_evpn_local_es_evi_do_del(struct zebra_evpn_es_evi *es_evi)
 		return;
 
 	if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
-		zlog_debug("local es %s evi %d del",
-				es_evi->es->esi_str, es_evi->zevpn->vni);
+		zlog_debug("local es %s evi %s del",
+				es_evi->es->esi_str, es_evi->zevpn->name);
 
 	if (es_evi->flags & ZEBRA_EVPNES_EVI_READY_FOR_BGP) {
 		/* send a del only if add was sent for it earlier */
@@ -241,8 +241,8 @@ static void zebra_evpn_local_es_evi_add(struct zebra_evpn_es *es,
 			return;
 
 		if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
-			zlog_debug("local es %s evi %d add",
-					es_evi->es->esi_str, es_evi->zevpn->vni);
+			zlog_debug("local es %s evi %s add",
+					es_evi->es->esi_str, es_evi->zevpn->name);
 		es_evi->flags |= ZEBRA_EVPNES_EVI_LOCAL;
 		/* add to the EVPN's local list */
 		listnode_init(&es_evi->l2vni_listnode, es_evi);
@@ -264,8 +264,8 @@ static void zebra_evpn_es_evi_show_entry(struct vty *vty,
 		if (es_evi->flags & ZEBRA_EVPNES_EVI_LOCAL)
 			strlcat(type_str, "L", sizeof(type_str));
 
-		vty_out(vty, "%-8d %-30s %-4s\n",
-				es_evi->zevpn->vni, es_evi->es->esi_str,
+		vty_out(vty, "%-12s %-30s %-4s\n",
+				es_evi->zevpn->name, es_evi->es->esi_str,
 				type_str);
 	}
 }
@@ -282,8 +282,8 @@ static void zebra_evpn_es_evi_show_entry_detail(struct vty *vty,
 		if (es_evi->flags & ZEBRA_EVPNES_EVI_LOCAL)
 			strlcat(type_str, "L", sizeof(type_str));
 
-		vty_out(vty, "VNI %d ESI: %s\n",
-				es_evi->zevpn->vni, es_evi->es->esi_str);
+		vty_out(vty, "EVPN %s ESI: %s\n",
+				es_evi->zevpn->name, es_evi->es->esi_str);
 		vty_out(vty, " Type: %s\n", type_str);
 		vty_out(vty, " Ready for BGP: %s\n",
 				(es_evi->flags &
@@ -337,9 +337,9 @@ void zebra_evpn_es_evi_show(struct vty *vty, bool uj, int detail)
 
 	if (!detail && !json) {
 		vty_out(vty, "Type: L local, R remote\n");
-		vty_out(vty, "%-8s %-30s %-4s\n", "VNI", "ESI", "Type");
+		vty_out(vty, "%-12s %-30s %-4s\n", "EVPN", "ESI", "Type");
 	}
-	/* Display all L2-VNIs */
+	/* Display all L2-EVPNs */
 	hash_iterate(zvrf->evpn_table, zebra_evpn_es_evi_show_one_evpn_hash_cb,
 			&wctx);
 }
@@ -353,7 +353,7 @@ void zebra_evpn_es_evi_show_vni(struct vty *vty, bool uj, vni_t vni, int detail)
 	if (zevpn) {
 		if (!detail && !json) {
 			vty_out(vty, "Type: L local, R remote\n");
-			vty_out(vty, "%-8s %-30s %-4s\n", "VNI", "ESI", "Type");
+			vty_out(vty, "%-12s %-30s %-4s\n", "EVPN", "ESI", "Type");
 		}
 	} else {
 		if (!uj)
@@ -362,7 +362,7 @@ void zebra_evpn_es_evi_show_vni(struct vty *vty, bool uj, vni_t vni, int detail)
 	zebra_evpn_es_evi_show_one_evpn(zevpn, vty, json, detail);
 }
 
-/* Initialize the ES tables maintained per-L2_VNI */
+/* Initialize the ES tables maintained per-L2_EVPN */
 void zebra_evpn_evpn_es_init(zebra_evpn_t *zevpn)
 {
 	/* Initialize the ES-EVI RB tree */
@@ -414,7 +414,7 @@ void zebra_evpn_update_all_es(zebra_evpn_t *zevpn)
  * the key is VID) or VLAN unaware (in which case the key is
  * 2. A VID-BD is created when a VLAN is associated with an access port or
  *    when the VLAN is associated with VXLAN_IF
- * 3. A BD is translated into ES-EVI entries when a VNI is associated
+ * 3. A BD is translated into ES-EVI entries when a EVPN is associated
  *  with the broadcast domain
  */
 /* Hash key for VLAN based broadcast domains */
@@ -515,7 +515,7 @@ static void zebra_evpn_acc_bd_free_on_deref(struct zebra_evpn_access_bd *acc_bd)
 	zebra_evpn_acc_vl_free(acc_bd);
 }
 
-/* called when a EVPN-L2VNI is set or cleared against a BD */
+/* called when a EVPN-L2EVPN is set or cleared against a BD */
 static void zebra_evpn_acc_bd_evpn_set(struct zebra_evpn_access_bd *acc_bd,
 		zebra_evpn_t *zevpn, zebra_evpn_t *old_zevpn)
 {
@@ -523,8 +523,8 @@ static void zebra_evpn_acc_bd_evpn_set(struct zebra_evpn_access_bd *acc_bd,
 	struct listnode *node;
 
 	if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
-		zlog_debug("access vlan %d l2-vni %u set",
-				acc_bd->vid, zevpn ? zevpn->vni : 0);
+		zlog_debug("access vlan %d l2-evpn %s set",
+				acc_bd->vid, zevpn ? zevpn->name : 0);
 
 	for (ALL_LIST_ELEMENTS_RO(acc_bd->mbr_zifs, node, zif)) {
 		if (!zif->es_info.es)
@@ -562,8 +562,8 @@ void zebra_evpn_vl_vxl_ref(uint16_t vid, struct zebra_if *vxlan_zif)
 		return;
 
 	if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
-		zlog_debug("access vlan %d vni %u ref",
-				acc_bd->vid, vxlan_zif->l2info.vxl.vni);
+		zlog_debug("access vlan %d evpn %s ref",
+				acc_bd->vid, acc_bd->zevpn->name);
 
 	if (old_zevpn)
 		zebra_evpn_acc_bd_evpn_set(acc_bd, NULL, old_zevpn);
@@ -700,8 +700,8 @@ static void zebra_evpn_acc_vl_show_entry_detail(struct vty *vty,
 		vty_out(vty, " VxLAN Interface: %s\n",
 				acc_bd->vxlan_zif ?
 				acc_bd->vxlan_zif->ifp->name : "-");
-		vty_out(vty, " L2-VNI: %d\n",
-				acc_bd->zevpn ? acc_bd->zevpn->vni : 0);
+		vty_out(vty, " L2-EVPN: %s\n",
+				acc_bd->zevpn ? acc_bd->zevpn->name : 0);
 		vty_out(vty, " Member Count: %d\n",
 				listcount(acc_bd->mbr_zifs));
 		vty_out(vty, " Members: \n");
@@ -715,11 +715,11 @@ static void zebra_evpn_acc_vl_show_entry(struct vty *vty,
 		struct zebra_evpn_access_bd *acc_bd, json_object *json)
 {
 	if (!json)
-		vty_out(vty, "%-5u %21s %-8d %u\n",
+		vty_out(vty, "%-5u %21s %-12s %u\n",
 				acc_bd->vid,
 				acc_bd->vxlan_zif ?
 				acc_bd->vxlan_zif->ifp->name : "-",
-				acc_bd->zevpn ? acc_bd->zevpn->vni : 0,
+				acc_bd->zevpn ? acc_bd->zevpn->name : 0,
 				listcount(acc_bd->mbr_zifs));
 }
 
@@ -748,7 +748,7 @@ void zebra_evpn_acc_vl_show(struct vty *vty, bool uj)
 
 	if (!json)
 		vty_out(vty, "%-5s %21s %-8s %s\n",
-				"VLAN", "VxLAN-IF", "L2-VNI", "# Members");
+				"VLAN", "VxLAN-IF", "L2-EVPN", "# Members");
 
 	hash_iterate(zmh_info->evpn_vlan_table, zebra_evpn_acc_vl_show_hash,
 			&wctx);
@@ -1132,7 +1132,7 @@ static struct zebra_evpn_es *zebra_evpn_es_free(struct zebra_evpn_es *es)
 	list_delete(&es->es_vtep_list);
 	list_delete(&es->mac_list);
 
-	/* remove from the VNI-ESI rb tree */
+	/* remove from the EVPN-ESI rb tree */
 	RB_REMOVE(zebra_es_rb_head, &zmh_info->es_rb_tree, es);
 
 	XFREE(MTYPE_ZES, es);
@@ -1273,7 +1273,7 @@ void zebra_evpn_es_send_all_to_client(bool add)
 }
 
 /* walk the vlan bitmap associated with the zif and create or delete
- * es_evis for all vlans associated with a VNI.
+ * es_evis for all vlans associated with a EVPN.
  * XXX: This API is really expensive. optimize later if possible.
  */
 static void zebra_evpn_es_setup_evis(struct zebra_evpn_es *es)
@@ -1327,7 +1327,7 @@ static void zebra_evpn_es_local_info_set(struct zebra_evpn_es *es,
 	if (if_is_operative(zif->ifp))
 		es->flags |= ZEBRA_EVPNES_OPER_UP;
 
-	/* setup base-vni if one doesn't already exist; the ES will get sent
+	/* setup base-evpn if one doesn't already exist; the ES will get sent
 	 * to BGP as a part of that process
 	 */
 	if (!zmh_info->es_base_evpn)
@@ -1815,7 +1815,7 @@ static void zebra_evpn_es_show_entry_detail(struct vty *vty,
 		vty_out(vty, " Ready for BGP: %s\n",
 				(es->flags & ZEBRA_EVPNES_READY_FOR_BGP) ?
 				"yes" : "no");
-		vty_out(vty, " VNI Count: %d\n", listcount(es->es_evi_list));
+		vty_out(vty, " EVPN Count: %d\n", listcount(es->es_evi_list));
 		vty_out(vty, " MAC Count: %d\n", listcount(es->mac_list));
 		vty_out(vty, " Nexthop group: 0x%x\n", es->nhg_id);
 		vty_out(vty, " VTEPs:\n");
@@ -1981,11 +1981,11 @@ DEFPY(zebra_evpn_es_id,
 }
 
 /*****************************************************************************/
-/* A base L2-VNI is maintained to derive parameters such as ES originator-IP.
+/* A base L2-EVPN is maintained to derive parameters such as ES originator-IP.
  * XXX: once single vxlan device model becomes available this will not be
  * necessary
  */
-/* called when a new vni is added or becomes oper up or becomes a bridge port */
+/* called when a new EVPN is added or becomes oper up or becomes a bridge port */
 void zebra_evpn_es_set_base_evpn(zebra_evpn_t *zevpn)
 {
 	struct listnode *node;
@@ -2003,8 +2003,8 @@ void zebra_evpn_es_set_base_evpn(zebra_evpn_t *zevpn)
 			return;
 
 		if (IS_ZEBRA_DEBUG_EVPN_MH_ES)
-			zlog_debug("es base vni set to %d",
-					zevpn->vni);
+			zlog_debug("es base evpn set to %s",
+					zevpn->name);
 		zmh_info->es_base_evpn = zevpn;
 	}
 
@@ -2030,7 +2030,7 @@ void zebra_evpn_es_set_base_evpn(zebra_evpn_t *zevpn)
 	}
 }
 
-/* called when a vni is removed or becomes oper down or is removed from a
+/* called when a evpn is removed or becomes oper down or is removed from a
  * bridge
  */
 void zebra_evpn_es_clear_base_evpn(zebra_evpn_t *zevpn)
@@ -2059,7 +2059,7 @@ void zebra_evpn_es_clear_base_evpn(zebra_evpn_t *zevpn)
 	}
 }
 
-/* Locate an "eligible" L2-VNI to follow */
+/* Locate an "eligible" L2-EVPN to follow */
 static int zebra_evpn_es_get_one_base_evpn_cb(struct hash_bucket *b, void *data)
 {
 	zebra_evpn_t *zevpn = b->data;
