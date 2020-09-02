@@ -146,6 +146,21 @@ static inline struct interface *zevpn_map_to_svi(zebra_evpn_t *zevpn)
 	return zvni_map_to_svi(zl2_info.access_vlan, zif->brslave_info.br_if);
 }
 
+zebra_evpn_t *zebra_evpn_lookup(char *name);
+	static inline void zebra_evpn_vni2name(char *name, vni_t vni)
+{
+	snprintf(name, VRF_NAMSIZ, "VNI-%d", vni);
+}
+
+static inline zebra_evpn_t *zebra_evpn_lookup_vni(vni_t vni)
+{
+	char name[VRF_NAMSIZ];
+
+	zebra_evpn_vni2name(name, vni);
+
+	return zebra_evpn_lookup(name);
+}
+
 int advertise_gw_macip_enabled(zebra_evpn_t *zevpn);
 int advertise_svi_macip_enabled(zebra_evpn_t *zevpn);
 void zebra_evpn_print(zebra_evpn_t *zevpn, void **ctxt);
@@ -177,8 +192,7 @@ unsigned int zebra_evpn_hash_keymake(const void *p);
 bool zebra_evpn_hash_cmp(const void *p1, const void *p2);
 int zebra_evpn_list_cmp(void *p1, void *p2);
 void *zebra_evpn_alloc(void *p);
-zebra_evpn_t *zebra_evpn_lookup(vni_t vni);
-zebra_evpn_t *zebra_evpn_add(vni_t vni);
+zebra_evpn_t *zebra_evpn_add(char *name);
 int zebra_evpn_del(zebra_evpn_t *zevpn);
 int zebra_evpn_send_add_to_client(zebra_evpn_t *zevpn);
 int zebra_evpn_send_del_to_client(zebra_evpn_t *zevpn);

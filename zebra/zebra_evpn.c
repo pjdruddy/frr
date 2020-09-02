@@ -671,7 +671,7 @@ zebra_evpn_t *zebra_evpn_map_vlan(struct interface *ifp,
 	if (!found)
 		return NULL;
 
-	zevpn = zebra_evpn_lookup(vxl->vni);
+	zevpn = zebra_evpn_lookup_vni(vxl->vni);
 	return zevpn;
 }
 
@@ -743,7 +743,7 @@ zebra_evpn_t *zebra_evpn_from_svi(struct interface *ifp,
 	if (!found)
 		return NULL;
 
-	zevpn = zebra_evpn_lookup(vxl->vni);
+	zevpn = zebra_evpn_lookup_vni(vxl->vni);
 	return zevpn;
 }
 
@@ -850,7 +850,7 @@ unsigned int zebra_evpn_hash_keymake(const void *p)
 {
 	const zebra_evpn_t *zevpn = p;
 
-	return (jhash_1word(zevpn->vni, 0));
+	return (jhash(zevpn->name, strnlen(zevpn->name, VRF_NAMSIZ), 0));
 }
 
 /*
@@ -861,7 +861,10 @@ bool zebra_evpn_hash_cmp(const void *p1, const void *p2)
 	const zebra_evpn_t *zevpn1 = p1;
 	const zebra_evpn_t *zevpn2 = p2;
 
-	return (zevpn1->vni == zevpn2->vni);
+	if (strncmp(zevpn1->name, zevpn2->name, VRF_NAMSIZ) == 0)
+		return true;
+
+	return false;
 }
 
 int zebra_evpn_list_cmp(void *p1, void *p2)
@@ -883,9 +886,7 @@ void *zebra_evpn_alloc(void *p)
 	zebra_evpn_t *zevpn;
 
 	zevpn = XCALLOC(MTYPE_ZEVPN, sizeof(zebra_evpn_t));
-	zevpn->vni = tmp_vni->vni;
-	/* auto-generate name from vni */
-	snprintf(zevpn->name, VRF_NAMSIZ, "VNI-%d", zevpn->vni);
+	strncpy(zevpn->name, tmp_vni->name, VRF_NAMSIZ);
 
 	return ((void *)zevpn);
 }
@@ -893,17 +894,18 @@ void *zebra_evpn_alloc(void *p)
 /*
  * Look up EVPN hash entry.
  */
-zebra_evpn_t *zebra_evpn_lookup(vni_t vni)
+zebra_evpn_t *zebra_evpn_lookup(char *name)
 {
 	struct zebra_vrf *zvrf;
-	zebra_evpn_t tmp_vni;
+	zebra_evpn_t tmp_zevpn;
 	zebra_evpn_t *zevpn = NULL;
 
 	zvrf = zebra_vrf_get_evpn();
 	assert(zvrf);
-	memset(&tmp_vni, 0, sizeof(zebra_evpn_t));
-	tmp_vni.vni = vni;
-	zevpn = hash_lookup(zvrf->evpn_table, &tmp_vni);
+
+	memset(&tmp_zevpn, 0, sizeof(zebra_evpn_t));
+	strncpy(tmp_zevpn.name, name, VRF_NAMSIZ);
+	zevpn = hash_lookup(zvrf->evpn_table, &tmp_zevpn);
 
 	return zevpn;
 }
@@ -911,7 +913,7 @@ zebra_evpn_t *zebra_evpn_lookup(vni_t vni)
 /*
  * Add EVPN hash entry.
  */
-zebra_evpn_t *zebra_evpn_add(vni_t vni)
+zebra_evpn_t *zebra_evpn_add(char *name)
 {
 	struct zebra_vrf *zvrf;
 	zebra_evpn_t tmp_zevpn;
@@ -920,7 +922,7 @@ zebra_evpn_t *zebra_evpn_add(vni_t vni)
 	zvrf = zebra_vrf_get_evpn();
 	assert(zvrf);
 	memset(&tmp_zevpn, 0, sizeof(zebra_evpn_t));
-	tmp_zevpn.vni = vni;
+	strncpy(tmp_zevpn.name, name, VRF_NAMSIZ);
 	zevpn = hash_get(zvrf->evpn_table, &tmp_zevpn, zebra_evpn_alloc);
 	assert(zevpn);
 
@@ -1270,7 +1272,7 @@ void process_remote_macip_add(vni_t vni, struct ethaddr *macaddr,
 	struct zebra_vrf *zvrf;
 
 	/* Locate EVPN hash entry - expected to exist. */
-	zevpn = zebra_evpn_lookup(vni);
+	zevpn = zebra_evpn_lookup_vni(vni);
 	if (!zevpn) {
 		zlog_warn("Unknown VNI %u upon remote MACIP ADD", vni);
 		return;
@@ -1349,7 +1351,7 @@ void process_remote_macip_del(vni_t vni, struct ethaddr *macaddr,
 	char buf1[INET6_ADDRSTRLEN];
 
 	/* Locate EVPN hash entry - expected to exist. */
-	zevpn = zebra_evpn_lookup(vni);
+	zevpn = zebra_evpn_lookup_vni(vni);
 	if (!zevpn) {
 		if (IS_ZEBRA_DEBUG_VXLAN)
 			zlog_debug("Unknown VNI %u upon remote MACIP DEL", vni);
