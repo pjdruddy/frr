@@ -39,6 +39,7 @@ extern "C" {
 /* VxLAN Network Identifier - 24-bit (RFC 7348) */
 typedef uint32_t vni_t;
 #define VNI_MAX 16777215 /* (2^24 - 1) */
+#define EVPN_NAMSIZ 14
 
 /* Flooding mechanisms for BUM packets. */
 /* Currently supported mechanisms are head-end (ingress) replication
@@ -50,6 +51,11 @@ enum vxlan_flood_control {
 	VXLAN_FLOOD_DISABLED,
 	VXLAN_FLOOD_PIM_SM,
 };
+
+static inline void evpn_vni2name(char *name, vni_t vni)
+{
+	snprintf(name, EVPN_NAMSIZ, "VNI-%d", vni);
+}
 
 #ifdef __cplusplus
 }
