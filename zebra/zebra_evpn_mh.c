@@ -817,7 +817,7 @@ static void zebra_evpn_acc_vl_show_entry(struct vty *vty,
 	if (json) {
 		zebra_evpn_acc_vl_json_fill(acc_bd, json, false);
 	} else {
-		vty_out(vty, "%-5u %21s %-8d %u\n",
+		vty_out(vty, "%-5u %21s %-12s %u\n",
 				acc_bd->vid,
 				acc_bd->vxlan_zif ?
 				acc_bd->vxlan_zif->ifp->name : "-",

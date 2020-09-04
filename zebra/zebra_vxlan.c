@@ -979,9 +979,9 @@ static int zevpn_build_hash_table_zns(struct ns *ns,
 				/* Send Loval Neighbor entries to client */
 				zebra_evpn_send_neigh_to_client(zevpn);
 			} else {
-				char evpn_name[VRF_NAMSIZ];
+				char evpn_name[EVPN_NAMSIZ];
 
-				zebra_evpn_vni2name(evpn_name, vni);
+				evpn_vni2name(evpn_name, vni);
 				zevpn = zebra_evpn_add(evpn_name);
 				if (!zevpn) {
 					zlog_debug(
@@ -2047,6 +2047,7 @@ static int zebra_vxlan_handle_vni_transition(struct zebra_vrf *zvrf, vni_t vni,
 		struct zebra_l2info_vxlan *vxl;
 		struct interface *vlan_if;
 		bool found = false;
+		char evpn_name[EVPN_NAMSIZ];
 
 		if (IS_ZEBRA_DEBUG_VXLAN)
 			zlog_debug("Adding L2-VNI %u - transition from L3-VNI",
@@ -2078,11 +2079,12 @@ static int zebra_vxlan_handle_vni_transition(struct zebra_vrf *zvrf, vni_t vni,
 		}
 
 		/* Create VNI hash entry for L2VNI */
-		zevpn = zebra_evpn_lookup(vni);
+		zevpn = zebra_evpn_lookup_vni(vni);
 		if (zevpn)
 			return 0;
 
-		zevpn = zebra_evpn_add(vni);
+		evpn_vni2name(evpn_name, vni);
+		zevpn = zebra_evpn_add(evpn_name);
 		if (!zevpn) {
 			flog_err(EC_ZEBRA_VNI_ADD_FAILED,
 				 "Adding L2-VNI - Failed to add VNI hash, VNI %u",
@@ -5186,9 +5188,9 @@ int zebra_vxlan_if_add(struct interface *ifp)
 		/* Create or update EVPN hash. */
 		zevpn = zebra_evpn_lookup_vni(vni);
 		if (!zevpn) {
-			char evpn_name[VRF_NAMSIZ];
+			char evpn_name[EVPN_NAMSIZ];
 
-			zebra_evpn_vni2name(evpn_name, vni);
+			evpn_vni2name(evpn_name, vni);
 			zevpn = zebra_evpn_add(evpn_name);
 			if (!zevpn) {
 				flog_err(

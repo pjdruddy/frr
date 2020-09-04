@@ -156,16 +156,11 @@ static inline struct interface *zevpn_map_to_svi(zebra_evpn_t *zevpn)
 }
 
 zebra_evpn_t *zebra_evpn_lookup(char *name);
-	static inline void zebra_evpn_vni2name(char *name, vni_t vni)
-{
-	snprintf(name, VRF_NAMSIZ, "VNI-%d", vni);
-}
-
 static inline zebra_evpn_t *zebra_evpn_lookup_vni(vni_t vni)
 {
 	char name[VRF_NAMSIZ];
 
-	zebra_evpn_vni2name(name, vni);
+	evpn_vni2name(name, vni);
 
 	return zebra_evpn_lookup(name);
 }

@@ -945,7 +945,7 @@ unsigned int zebra_evpn_hash_keymake(const void *p)
 {
 	const zebra_evpn_t *zevpn = p;
 
-	return (jhash(zevpn->name, strnlen(zevpn->name, VRF_NAMSIZ), 0));
+	return (jhash(zevpn->name, strnlen(zevpn->name, EVPN_NAMSIZ), 0));
 }
 
 /*
@@ -956,7 +956,7 @@ bool zebra_evpn_hash_cmp(const void *p1, const void *p2)
 	const zebra_evpn_t *zevpn1 = p1;
 	const zebra_evpn_t *zevpn2 = p2;
 
-	if (strncmp(zevpn1->name, zevpn2->name, VRF_NAMSIZ) == 0)
+	if (strncmp(zevpn1->name, zevpn2->name, EVPN_NAMSIZ) == 0)
 		return true;
 
 	return false;
@@ -981,7 +981,7 @@ void *zebra_evpn_alloc(void *p)
 	zebra_evpn_t *zevpn;
 
 	zevpn = XCALLOC(MTYPE_ZEVPN, sizeof(zebra_evpn_t));
-	strlcpy(zevpn->name, tmp_zevpn->name, VRF_NAMSIZ);
+	strlcpy(zevpn->name, tmp_zevpn->name, EVPN_NAMSIZ);
 
 	return ((void *)zevpn);
 }
@@ -999,7 +999,7 @@ zebra_evpn_t *zebra_evpn_lookup(char *name)
 	assert(zvrf);
 
 	memset(&tmp_zevpn, 0, sizeof(zebra_evpn_t));
-	strlcpy(tmp_zevpn.name, name, VRF_NAMSIZ);
+	strlcpy(tmp_zevpn.name, name, EVPN_NAMSIZ);
 	zevpn = hash_lookup(zvrf->evpn_table, &tmp_zevpn);
 
 	return zevpn;
@@ -1017,7 +1017,7 @@ zebra_evpn_t *zebra_evpn_add(char *name)
 	zvrf = zebra_vrf_get_evpn();
 	assert(zvrf);
 	memset(&tmp_zevpn, 0, sizeof(zebra_evpn_t));
-	strlcpy(tmp_zevpn.name, name, VRF_NAMSIZ);
+	strlcpy(tmp_zevpn.name, name, EVPN_NAMSIZ);
 	zevpn = hash_get(zvrf->evpn_table, &tmp_zevpn, zebra_evpn_alloc);
 	assert(zevpn);
 
