@@ -61,6 +61,7 @@ RB_PROTOTYPE(bgp_es_evi_rb_head, bgp_evpn_es_evi, rb_node,
  */
 struct bgpevpn {
 	vni_t vni;
+	char name[EVPN_NAMSIZ];
 	vrf_id_t tenant_vrf_id;
 	uint32_t flags;
 #define VNI_FLAG_CFGD              0x1  /* VNI is user configured */

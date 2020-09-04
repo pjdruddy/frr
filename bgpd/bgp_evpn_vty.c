@@ -484,6 +484,7 @@ static void display_vni(struct vty *vty, struct bgpevpn *vpn, json_object *json)
 		json_import_rtl = json_object_new_array();
 		json_export_rtl = json_object_new_array();
 		json_object_int_add(json, "vni", vpn->vni);
+		json_object_string_add(json, "name", vpn->name);
 		json_object_string_add(json, "type", "L2");
 		json_object_string_add(json, "inKernel",
 				       is_vni_live(vpn) ? "True" : "False");
@@ -521,7 +522,7 @@ static void display_vni(struct vty *vty, struct bgpevpn *vpn, json_object *json)
 			json_object_string_add(json, "advertiseSviMacIp",
 					       "Disabled");
 	} else {
-		vty_out(vty, "VNI: %d", vpn->vni);
+		vty_out(vty, "%s", vpn->name);
 		if (is_vni_live(vpn))
 			vty_out(vty, " (known to the kernel)");
 		vty_out(vty, "\n");

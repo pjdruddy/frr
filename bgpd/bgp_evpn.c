@@ -5109,6 +5109,7 @@ struct bgpevpn *bgp_evpn_new(struct bgp *bgp, vni_t vni,
 
 	/* Set values - RD and RT set to defaults. */
 	vpn->vni = vni;
+	evpn_vni2name(vpn->name, vni);
 	vpn->originator_ip = originator_ip;
 	vpn->tenant_vrf_id = tenant_vrf_id;
 	vpn->mcast_grp = mcast_grp;
