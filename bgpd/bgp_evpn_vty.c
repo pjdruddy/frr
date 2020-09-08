@@ -2195,6 +2195,7 @@ static struct bgpevpn *evpn_create_update_vni(struct bgp *bgp, vni_t vni)
 {
 	struct bgpevpn *vpn;
 	struct in_addr mcast_grp = {INADDR_ANY};
+	char name[EVPN_NAMSIZ];
 
 	if (!bgp->vnihash)
 		return NULL;
@@ -2213,7 +2214,9 @@ static struct bgpevpn *evpn_create_update_vni(struct bgp *bgp, vni_t vni)
 		/* tenant vrf will be updated when we get local_vni_add from
 		 * zebra
 		 */
-		vpn = bgp_evpn_new(bgp, vni, bgp->router_id, 0, mcast_grp);
+		evpn_vni2name(name, vni);
+		vpn = bgp_evpn_new(bgp, name, vni, bgp->router_id, 0,
+				   mcast_grp);
 		if (!vpn) {
 			flog_err(
 				EC_BGP_VNI,

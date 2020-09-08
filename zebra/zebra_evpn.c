@@ -1080,6 +1080,7 @@ int zebra_evpn_send_add_to_client(zebra_evpn_t *zevpn)
 	s = stream_new(ZEBRA_MAX_PACKET_SIZ);
 
 	zclient_create_header(s, ZEBRA_VNI_ADD, zebra_vrf_get_evpn_id());
+	stream_put(s, zevpn->name, EVPN_NAMSIZ);
 	stream_putl(s, zevpn->vni);
 	stream_put_in_addr(s, &zevpn->local_vtep_ip);
 	stream_put(s, &zevpn->vrf_id, sizeof(vrf_id_t)); /* tenant vrf */
@@ -1130,7 +1131,7 @@ int zebra_evpn_send_del_to_client(zebra_evpn_t *zevpn)
 	stream_reset(s);
 
 	zclient_create_header(s, ZEBRA_VNI_DEL, zebra_vrf_get_evpn_id());
-	stream_putl(s, zevpn->vni);
+	stream_put(s, zevpn->name, EVPN_NAMSIZ);
 
 	/* Write packet size. */
 	stream_putw_at(s, 0, stream_get_endp(s));

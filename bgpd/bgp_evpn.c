@@ -5107,10 +5107,12 @@ struct bgpevpn *bgp_evpn_lookup_vni(struct bgp *bgp, vni_t vni)
 /*
  * Create a new vpn - invoked upon configuration or zebra notification.
  */
-struct bgpevpn *bgp_evpn_new(struct bgp *bgp, vni_t vni,
-		struct in_addr originator_ip,
-		vrf_id_t tenant_vrf_id,
-		struct in_addr mcast_grp)
+struct bgpevpn *bgp_evpn_new(struct bgp *bgp,
+			     char *name,
+			     vni_t vni,
+			     struct in_addr originator_ip,
+			     vrf_id_t tenant_vrf_id,
+			     struct in_addr mcast_grp)
 {
 	struct bgpevpn *vpn;
 
@@ -5570,18 +5572,18 @@ int bgp_evpn_local_l3vni_del(vni_t l3vni, vrf_id_t vrf_id)
 /*
  * Handle del of a local VNI.
  */
-int bgp_evpn_local_vni_del(struct bgp *bgp, vni_t vni)
+int bgp_evpn_local_vni_del(struct bgp *bgp, char *name)
 {
 	struct bgpevpn *vpn;
 
 	/* Locate VNI hash */
-	vpn = bgp_evpn_lookup_vni(bgp, vni);
+	vpn = bgp_evpn_lookup(bgp, name);
 	if (!vpn) {
 		if (bgp_debug_zebra(NULL))
 			flog_warn(
 				EC_BGP_EVPN_VPN_VNI,
-				"%u: VNI hash entry for VNI %u not found at DEL",
-				bgp->vrf_id, vni);
+				"%u: VNI hash entry for %s not found at DEL",
+				bgp->vrf_id, name);
 		return 0;
 	}
 
@@ -5607,7 +5609,8 @@ int bgp_evpn_local_vni_del(struct bgp *bgp, vni_t vni)
  * Handle add (or update) of a local VNI. The VNI changes we care
  * about are for the local-tunnel-ip and the (tenant) VRF.
  */
-int bgp_evpn_local_vni_add(struct bgp *bgp, vni_t vni,
+int bgp_evpn_local_vni_add(struct bgp *bgp, char *name,
+			   vni_t vni,
 			   struct in_addr originator_ip,
 			   vrf_id_t tenant_vrf_id,
 			   struct in_addr mcast_grp)
@@ -5652,8 +5655,8 @@ int bgp_evpn_local_vni_add(struct bgp *bgp, vni_t vni,
 
 	/* Create or update as appropriate. */
 	if (!vpn) {
-		vpn = bgp_evpn_new(bgp, vni, originator_ip, tenant_vrf_id,
-				mcast_grp);
+		vpn = bgp_evpn_new(bgp, name, vni, originator_ip, tenant_vrf_id,
+				   mcast_grp);
 		if (!vpn) {
 			flog_err(
 				EC_BGP_VNI,

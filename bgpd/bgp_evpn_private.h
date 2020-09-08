@@ -611,7 +611,7 @@ extern void bgp_evpn_derive_auto_rd(struct bgp *bgp, struct bgpevpn *vpn);
 extern void bgp_evpn_derive_auto_rd_for_vrf(struct bgp *bgp);
 extern struct bgpevpn *bgp_evpn_lookup(struct bgp *bgp, char *name);
 extern struct bgpevpn *bgp_evpn_lookup_vni(struct bgp *bgp, vni_t vni);
-extern struct bgpevpn *bgp_evpn_new(struct bgp *bgp, vni_t vni,
+extern struct bgpevpn *bgp_evpn_new(struct bgp *bgp, char *name, vni_t vni,
 		struct in_addr originator_ip,
 		vrf_id_t tenant_vrf_id,
 		struct in_addr mcast_grp);
