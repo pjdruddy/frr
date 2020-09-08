@@ -82,13 +82,13 @@ static struct in_addr zero_vtep_ip;
 static unsigned int vni_hash_key_make(const void *p)
 {
 	const struct bgpevpn *vpn = p;
-	return (jhash_1word(vpn->vni, 0));
+	return (jhash(vpn->name, strnlen(vpn->name, EVPN_NAMSIZ), 0));
 }
 
 /*
  * Comparison function for vni hash
  */
-static bool vni_hash_cmp(const void *p1, const void *p2)
+static bool vpn_hash_cmp(const void *p1, const void *p2)
 {
 	const struct bgpevpn *vpn1 = p1;
 	const struct bgpevpn *vpn2 = p2;
@@ -97,7 +97,10 @@ static bool vni_hash_cmp(const void *p1, const void *p2)
 		return true;
 	if (!vpn1 || !vpn2)
 		return false;
-	return (vpn1->vni == vpn2->vni);
+	if (strncmp(vpn1->name, vpn2->name, EVPN_NAMSIZ) == 0)
+		return true;
+
+	return false;
 }
 
 int vni_list_cmp(void *p1, void *p2)
@@ -5078,18 +5081,27 @@ bool bgp_evpn_lookup_l3vni_l2vni_table(vni_t vni)
 	return false;
 }
 
-/*
- * Lookup VNI.
- */
-struct bgpevpn *bgp_evpn_lookup_vni(struct bgp *bgp, vni_t vni)
+struct bgpevpn *bgp_evpn_lookup(struct bgp *bgp, char *name)
 {
 	struct bgpevpn *vpn;
 	struct bgpevpn tmp;
 
 	memset(&tmp, 0, sizeof(struct bgpevpn));
-	tmp.vni = vni;
+	strlcpy(tmp.name, name, EVPN_NAMSIZ);
 	vpn = hash_lookup(bgp->vnihash, &tmp);
 	return vpn;
+}
+
+/*
+ * Lookup VNI.
+ */
+struct bgpevpn *bgp_evpn_lookup_vni(struct bgp *bgp, vni_t vni)
+{
+	char name[EVPN_NAMSIZ];
+
+	evpn_vni2name(name,vni);
+
+	return bgp_evpn_lookup(bgp, name);
 }
 
 /*
@@ -5760,7 +5772,7 @@ void bgp_evpn_cleanup(struct bgp *bgp)
 void bgp_evpn_init(struct bgp *bgp)
 {
 	bgp->vnihash =
-		hash_create(vni_hash_key_make, vni_hash_cmp, "BGP VNI Hash");
+		hash_create(vni_hash_key_make, vpn_hash_cmp, "BGP VNI Hash");
 	bgp->import_rt_hash =
 		hash_create(import_rt_hash_key_make, import_rt_hash_cmp,
 			    "BGP Import RT Hash");
