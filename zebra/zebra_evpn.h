@@ -202,9 +202,6 @@ int zebra_evpn_send_add_to_client(zebra_evpn_t *zevpn);
 int zebra_evpn_send_del_to_client(zebra_evpn_t *zevpn);
 zebra_vtep_t *zebra_evpn_vtep_find(zebra_evpn_t *zevpn,
 				   struct in_addr *vtep_ip);
-zebra_vtep_t *zebra_evpn_vtep_add(zebra_evpn_t *zevpn, struct in_addr *vtep_ip,
-				  int flood_control);
-int zebra_evpn_vtep_del(zebra_evpn_t *zevpn, zebra_vtep_t *zvtep);
 int zebra_evpn_vtep_del_all(zebra_evpn_t *zevpn, int uninstall);
 int zebra_evpn_vtep_install(zebra_evpn_t *zevpn, zebra_vtep_t *zvtep);
 int zebra_evpn_vtep_uninstall(zebra_evpn_t *zevpn, struct in_addr *vtep_ip);
@@ -218,6 +215,10 @@ void process_remote_macip_add(vni_t vni, struct ethaddr *macaddr,
 void process_remote_macip_del(vni_t vni, struct ethaddr *macaddr,
 			      uint16_t ipa_len, struct ipaddr *ipaddr,
 			      struct in_addr vtep_ip);
+void zebra_evpn_remote_vtep_add(ZAPI_HANDLER_ARGS);
+void zebra_evpn_remote_vtep_del(ZAPI_HANDLER_ARGS);
+void zebra_evpn_remote_macip_add(ZAPI_HANDLER_ARGS);
+void zebra_evpn_remote_macip_del(ZAPI_HANDLER_ARGS);
 void zebra_evpn_cfg_cleanup(struct hash_bucket *bucket, void *ctxt);
 
 #ifdef __cplusplus

@@ -692,7 +692,7 @@ static int bgp_zebra_send_remote_vtep(struct bgp *bgp, struct bgpevpn *vpn,
 	zclient_create_header(
 		s, add ? ZEBRA_REMOTE_VTEP_ADD : ZEBRA_REMOTE_VTEP_DEL,
 		bgp->vrf_id);
-	stream_putl(s, vpn->vni);
+	stream_put(s, vpn->name, EVPN_NAMSIZ);
 	if (is_evpn_prefix_ipaddr_v4(p))
 		stream_put_in_addr(s, &p->prefix.imet_addr.ip.ipaddr_v4);
 	else if (is_evpn_prefix_ipaddr_v6(p)) {
