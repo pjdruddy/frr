@@ -621,7 +621,7 @@ static int bgp_zebra_send_remote_macip(struct bgp *bgp, struct bgpevpn *vpn,
 	zclient_create_header(
 		s, add ? ZEBRA_REMOTE_MACIP_ADD : ZEBRA_REMOTE_MACIP_DEL,
 		bgp->vrf_id);
-	stream_putl(s, vpn->vni);
+	stream_put(s, vpn->name, EVPN_NAMSIZ);
 	stream_put(s, &p->prefix.macip_addr.mac.octet, ETH_ALEN); /* Mac Addr */
 	/* IP address length and IP address, if any. */
 	if (is_evpn_prefix_ipaddr_none(p))

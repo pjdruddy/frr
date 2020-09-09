@@ -1360,10 +1360,10 @@ zebra_evpn_process_sync_macip_add(zebra_evpn_t *zevpn, struct ethaddr *macaddr,
 
 /************************** remote mac-ip handling **************************/
 /* Process a remote MACIP add from BGP. */
-void process_remote_macip_add(vni_t vni, struct ethaddr *macaddr,
-			      uint16_t ipa_len, struct ipaddr *ipaddr,
-			      uint8_t flags, uint32_t seq,
-			      struct in_addr vtep_ip, esi_t *esi)
+static void process_remote_macip_add(char *name, struct ethaddr *macaddr,
+				     uint16_t ipa_len, struct ipaddr *ipaddr,
+				     uint8_t flags, uint32_t seq,
+				     struct in_addr vtep_ip, esi_t *esi)
 {
 	zebra_evpn_t *zevpn;
 	zebra_vtep_t *zvtep;
@@ -1373,10 +1373,10 @@ void process_remote_macip_add(vni_t vni, struct ethaddr *macaddr,
 	struct zebra_vrf *zvrf;
 
 	/* Locate EVPN hash entry - expected to exist. */
-	zevpn = zebra_evpn_lookup_vni(vni);
+	zevpn = zebra_evpn_lookup(name);
 	if (!zevpn) {
 		if (IS_ZEBRA_DEBUG_VXLAN)
-			zlog_debug("Unknown VNI %u upon remote MACIP ADD", vni);
+			zlog_debug("Unknown %s upon remote MACIP ADD", name);
 		return;
 	}
 
@@ -1437,9 +1437,9 @@ void process_remote_macip_add(vni_t vni, struct ethaddr *macaddr,
 }
 
 /* Process a remote MACIP delete from BGP. */
-void process_remote_macip_del(vni_t vni, struct ethaddr *macaddr,
-			      uint16_t ipa_len, struct ipaddr *ipaddr,
-			      struct in_addr vtep_ip)
+static void process_remote_macip_del(char *name, struct ethaddr *macaddr,
+				     uint16_t ipa_len, struct ipaddr *ipaddr,
+				     struct in_addr vtep_ip)
 {
 	zebra_evpn_t *zevpn;
 	zebra_mac_t *mac = NULL;
@@ -1453,10 +1453,10 @@ void process_remote_macip_del(vni_t vni, struct ethaddr *macaddr,
 	char buf1[INET6_ADDRSTRLEN];
 
 	/* Locate EVPN hash entry - expected to exist. */
-	zevpn = zebra_evpn_lookup_vni(vni);
+	zevpn = zebra_evpn_lookup(name);
 	if (!zevpn) {
 		if (IS_ZEBRA_DEBUG_VXLAN)
-			zlog_debug("Unknown VNI %u upon remote MACIP DEL", vni);
+			zlog_debug("Unknown %s upon remote MACIP DEL", name);
 		return;
 	}
 
@@ -1725,6 +1725,171 @@ void zebra_evpn_remote_vtep_add(ZAPI_HANDLER_ARGS)
 stream_failure:
 	return;
 }
+
+static int32_t
+zebra_evpn_remote_macip_helper(bool add, struct stream *s, char *name,
+				struct ethaddr *macaddr, uint16_t *ipa_len,
+				struct ipaddr *ip, struct in_addr *vtep_ip,
+				uint8_t *flags, uint32_t *seq, esi_t *esi)
+{
+	uint16_t l = 0;
+
+	/*
+	 * Obtain each remote MACIP and process.
+	 * Message contains VNI, followed by MAC followed by IP (if any)
+	 * followed by remote VTEP IP.
+	 */
+	memset(ip, 0, sizeof(*ip));
+	STREAM_GET(name, s, EVPN_NAMSIZ);
+	STREAM_GET(macaddr->octet, s, ETH_ALEN);
+	STREAM_GETL(s, *ipa_len);
+
+	if (*ipa_len) {
+		if (*ipa_len == IPV4_MAX_BYTELEN)
+			ip->ipa_type = IPADDR_V4;
+		else if (*ipa_len == IPV6_MAX_BYTELEN)
+			ip->ipa_type = IPADDR_V6;
+		else {
+			if (IS_ZEBRA_DEBUG_VXLAN)
+				zlog_debug(
+					"ipa_len *must* be %d or %d bytes in length not %d",
+					IPV4_MAX_BYTELEN, IPV6_MAX_BYTELEN,
+					*ipa_len);
+			goto stream_failure;
+		}
+
+		STREAM_GET(&ip->ip.addr, s, *ipa_len);
+	}
+	l += 4 + ETH_ALEN + 4 + *ipa_len;
+	STREAM_GET(&vtep_ip->s_addr, s, IPV4_MAX_BYTELEN);
+	l += IPV4_MAX_BYTELEN;
+
+	if (add) {
+		STREAM_GETC(s, *flags);
+		STREAM_GETL(s, *seq);
+		l += 5;
+		STREAM_GET(esi, s, sizeof(esi_t));
+		l += sizeof(esi_t);
+	}
+
+	return l;
+
+stream_failure:
+	return -1;
+}
+
+/*
+ * Handle message from client to delete a remote MACIP for a VNI.
+ */
+void zebra_evpn_remote_macip_del(ZAPI_HANDLER_ARGS)
+{
+	struct stream *s;
+	char name[EVPN_NAMSIZ];
+	struct ethaddr macaddr;
+	struct ipaddr ip;
+	struct in_addr vtep_ip;
+	uint16_t l = 0, ipa_len;
+	char buf[ETHER_ADDR_STRLEN];
+	char buf1[INET6_ADDRSTRLEN];
+
+	memset(&macaddr, 0, sizeof(struct ethaddr));
+	memset(&ip, 0, sizeof(struct ipaddr));
+	memset(&vtep_ip, 0, sizeof(struct in_addr));
+
+	s = msg;
+
+	while (l < hdr->length) {
+		int res_length = zebra_evpn_remote_macip_helper(
+			false, s, name, &macaddr, &ipa_len, &ip, &vtep_ip, NULL,
+			NULL, NULL);
+
+		if (res_length == -1)
+			goto stream_failure;
+
+		l += res_length;
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug(
+				"Recv MACIP DEL %s MAC %s%s%s Remote VTEP %pI4 from %s",
+				name,
+				prefix_mac2str(&macaddr, buf, sizeof(buf)),
+				ipa_len ? " IP " : "",
+				ipa_len ?
+				ipaddr2str(&ip, buf1, sizeof(buf1)) : "",
+				&vtep_ip, zebra_route_string(client->proto));
+
+		process_remote_macip_del(name, &macaddr, ipa_len, &ip, vtep_ip);
+	}
+
+stream_failure:
+	return;
+}
+
+/*
+ * Handle message from client to add a remote MACIP for a VNI. This
+ * could be just the add of a MAC address or the add of a neighbor
+ * (IP+MAC).
+ */
+void zebra_evpn_remote_macip_add(ZAPI_HANDLER_ARGS)
+{
+	struct stream *s;
+	char name[EVPN_NAMSIZ];
+	struct ethaddr macaddr;
+	struct ipaddr ip;
+	struct in_addr vtep_ip;
+	uint16_t l = 0, ipa_len;
+	uint8_t flags = 0;
+	uint32_t seq;
+	char buf[ETHER_ADDR_STRLEN];
+	char buf1[INET6_ADDRSTRLEN];
+	esi_t esi;
+	char esi_buf[ESI_STR_LEN];
+
+	memset(&macaddr, 0, sizeof(struct ethaddr));
+	memset(&ip, 0, sizeof(struct ipaddr));
+	memset(&vtep_ip, 0, sizeof(struct in_addr));
+
+	if (!EVPN_ENABLED(zvrf)) {
+		zlog_debug("EVPN not enabled, ignoring remote MACIP ADD");
+		return;
+	}
+
+	s = msg;
+
+	while (l < hdr->length) {
+		int res_length = zebra_evpn_remote_macip_helper(
+			true, s, name, &macaddr, &ipa_len, &ip, &vtep_ip,
+			&flags, &seq, &esi);
+
+		if (res_length == -1)
+			goto stream_failure;
+
+		l += res_length;
+		if (IS_ZEBRA_DEBUG_VXLAN) {
+			if (memcmp(&esi, zero_esi, sizeof(esi_t)))
+				esi_to_str(&esi, esi_buf, sizeof(esi_buf));
+			else
+				strlcpy(esi_buf, "-", ESI_STR_LEN);
+			zlog_debug(
+				"Recv %sMACIP ADD %s MAC %s%s%s flags 0x%x seq %u VTEP %pI4 ESI %s from %s",
+				(flags & ZEBRA_MACIP_TYPE_SYNC_PATH) ?
+				"sync-" : "",
+				name,
+				prefix_mac2str(&macaddr, buf, sizeof(buf)),
+				ipa_len ? " IP " : "",
+				ipa_len ?
+				ipaddr2str(&ip, buf1, sizeof(buf1)) : "",
+				flags, seq, &vtep_ip, esi_buf,
+				zebra_route_string(client->proto));
+		}
+
+		process_remote_macip_add(name, &macaddr, ipa_len, &ip,
+					 flags, seq, vtep_ip, &esi);
+	}
+
+stream_failure:
+	return;
+}
+
 /************************** EVPN BGP config management ************************/
 void zebra_evpn_cfg_cleanup(struct hash_bucket *bucket, void *ctxt)
 {

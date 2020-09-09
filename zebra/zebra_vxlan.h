@@ -70,8 +70,6 @@ is_vxlan_flooding_head_end(void)
 #define VNI_STR_LEN 32
 
 /* ZAPI message handlers */
-extern void zebra_vxlan_remote_macip_add(ZAPI_HANDLER_ARGS);
-extern void zebra_vxlan_remote_macip_del(ZAPI_HANDLER_ARGS);
 extern void zebra_vxlan_flood_control(ZAPI_HANDLER_ARGS);
 extern void zebra_vxlan_advertise_subnet(ZAPI_HANDLER_ARGS);
 extern void zebra_vxlan_advertise_svi_macip(ZAPI_HANDLER_ARGS);
