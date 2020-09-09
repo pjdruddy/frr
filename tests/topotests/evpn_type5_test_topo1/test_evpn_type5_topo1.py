@@ -1476,7 +1476,7 @@ def test_evpn_routes_from_VNFs_p1(request):
                 )
 
     logger.info("Wait for 60 sec.")
-    sleep(60)
+    sleep(65)
 
     step(
         "Verify that DCG-2 receives EVPN routes corresponding to "
