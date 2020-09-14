@@ -80,7 +80,7 @@ extern struct interface *if_lookup_by_ipv6_exact(struct in6_addr *, ifindex_t,
 						 vrf_id_t);
 extern int bgp_zebra_advertise_subnet(struct bgp *bgp, int advertise,
 				      vni_t vni);
-extern int bgp_zebra_advertise_gw_macip(struct bgp *, int, vni_t);
+extern int bgp_zebra_advertise_gw_macip(struct bgp *, int, const char *);
 extern int bgp_zebra_advertise_svi_macip(struct bgp *bgp, int advertise,
 					 const char *name);
 extern int bgp_zebra_advertise_all_vni(struct bgp *, int);

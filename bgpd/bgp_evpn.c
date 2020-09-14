@@ -5703,7 +5703,7 @@ int bgp_evpn_local_vni_add(struct bgp *bgp, char *name,
 
 	/* If we are advertising gateway mac-ip
 	   It needs to be conveyed again to zebra */
-	bgp_zebra_advertise_gw_macip(bgp, vpn->advertise_gw_macip, vpn->vni);
+	bgp_zebra_advertise_gw_macip(bgp, vpn->advertise_gw_macip, vpn->name);
 
 	/* advertise svi mac-ip knob to zebra */
 	bgp_zebra_advertise_svi_macip(bgp, vpn->advertise_svi_macip, vpn->name);

@@ -2977,14 +2977,14 @@ static void evpn_set_advertise_default_gw(struct bgp *bgp, struct bgpevpn *vpn)
 			return;
 
 		bgp->advertise_gw_macip = 1;
-		bgp_zebra_advertise_gw_macip(bgp, bgp->advertise_gw_macip, 0);
+		bgp_zebra_advertise_gw_macip(bgp, bgp->advertise_gw_macip, "");
 	} else {
 		if (vpn->advertise_gw_macip)
 			return;
 
 		vpn->advertise_gw_macip = 1;
 		bgp_zebra_advertise_gw_macip(bgp, vpn->advertise_gw_macip,
-					     vpn->vni);
+					     vpn->name);
 	}
 	return;
 }
@@ -3000,14 +3000,14 @@ static void evpn_unset_advertise_default_gw(struct bgp *bgp,
 			return;
 
 		bgp->advertise_gw_macip = 0;
-		bgp_zebra_advertise_gw_macip(bgp, bgp->advertise_gw_macip, 0);
+		bgp_zebra_advertise_gw_macip(bgp, bgp->advertise_gw_macip, "");
 	} else {
 		if (!vpn->advertise_gw_macip)
 			return;
 
 		vpn->advertise_gw_macip = 0;
 		bgp_zebra_advertise_gw_macip(bgp, vpn->advertise_gw_macip,
-					     vpn->vni);
+					     vpn->name);
 	}
 	return;
 }
