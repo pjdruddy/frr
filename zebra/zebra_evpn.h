@@ -212,6 +212,7 @@ void zebra_evpn_remote_vtep_add(ZAPI_HANDLER_ARGS);
 void zebra_evpn_remote_vtep_del(ZAPI_HANDLER_ARGS);
 void zebra_evpn_remote_macip_add(ZAPI_HANDLER_ARGS);
 void zebra_evpn_remote_macip_del(ZAPI_HANDLER_ARGS);
+void zebra_evpn_advertise_svi_macip(ZAPI_HANDLER_ARGS);
 void zebra_evpn_cfg_cleanup(struct hash_bucket *bucket, void *ctxt);
 
 #ifdef __cplusplus

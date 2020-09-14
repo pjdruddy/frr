@@ -1890,6 +1890,105 @@ stream_failure:
 	return;
 }
 
+/*
+ * Handle message from client to enable/disable advertisement of svi macip
+ * routes
+ */
+void zebra_evpn_advertise_svi_macip(ZAPI_HANDLER_ARGS)
+{
+	struct stream *s;
+	int advertise;
+	zebra_evpn_t *zevpn = NULL;
+	struct interface *ifp = NULL;
+	char name[EVPN_NAMSIZ];
+
+	if (!EVPN_ENABLED(zvrf)) {
+		zlog_debug("EVPN SVI-MACIP Adv for non-EVPN VRF %u",
+			   zvrf_id(zvrf));
+		return;
+	}
+
+	s = msg;
+	STREAM_GETC(s, advertise);
+	STREAM_GET(name, s, EVPN_NAMSIZ);
+
+	if (!strnlen(name, EVPN_NAMSIZ)) {
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug("EVPN SVI-MACIP Adv %s, currently %s",
+				   advertise ? "enabled" : "disabled",
+				   advertise_svi_macip_enabled(NULL)
+					   ? "enabled"
+					   : "disabled");
+
+		if (zvrf->advertise_svi_macip == advertise)
+			return;
+
+
+		if (advertise) {
+			zvrf->advertise_svi_macip = advertise;
+			hash_iterate(zvrf->evpn_table,
+				     zebra_evpn_gw_macip_add_for_evpn_hash,
+				     NULL);
+		} else {
+			hash_iterate(zvrf->evpn_table,
+				     zebra_evpn_svi_macip_del_for_evpn_hash,
+				     NULL);
+			zvrf->advertise_svi_macip = advertise;
+		}
+
+	} else {
+		struct zebra_if *zif = NULL;
+		struct zebra_l2info_vxlan zl2_info;
+		struct interface *vlan_if = NULL;
+
+		zevpn = zebra_evpn_lookup(name);
+		if (!zevpn)
+			return;
+
+		if (IS_ZEBRA_DEBUG_VXLAN)
+			zlog_debug("EVPN SVI macip Adv %s on %s , currently %s",
+				   advertise ? "enabled" : "disabled", name,
+				   advertise_svi_macip_enabled(zevpn)
+					   ? "enabled"
+					   : "disabled");
+
+		if (zevpn->advertise_svi_macip == advertise)
+			return;
+
+		/* Store flag even though SVI is not present.
+		 * Once SVI comes up triggers self MAC-IP route add.
+		 */
+		zevpn->advertise_svi_macip = advertise;
+
+		ifp = zevpn->vxlan_if;
+		if (!ifp)
+			return;
+
+		zif = ifp->info;
+
+		/* If down or not mapped to a bridge, we're done. */
+		if (!if_is_operative(ifp) || !zif->brslave_info.br_if)
+			return;
+
+		zl2_info = zif->l2info.vxl;
+		vlan_if = zvni_map_to_svi(zl2_info.access_vlan,
+					  zif->brslave_info.br_if);
+		if (!vlan_if)
+			return;
+
+		if (advertise) {
+			/* Add primary SVI MAC-IP */
+			zebra_evpn_add_macip_for_intf(vlan_if, zevpn);
+		} else {
+			/* Del primary SVI MAC-IP */
+			zebra_evpn_del_macip_for_intf(vlan_if, zevpn);
+		}
+	}
+
+stream_failure:
+	return;
+}
+
 /************************** EVPN BGP config management ************************/
 void zebra_evpn_cfg_cleanup(struct hash_bucket *bucket, void *ctxt)
 {

@@ -2953,8 +2953,8 @@ static void evpn_set_advertise_svi_macip(struct bgp *bgp, struct bgpevpn *vpn,
 			return;
 
 		bgp->evpn_info->advertise_svi_macip = set;
-		bgp_zebra_advertise_svi_macip(bgp,
-					bgp->evpn_info->advertise_svi_macip, 0);
+		bgp_zebra_advertise_svi_macip(
+			bgp, bgp->evpn_info->advertise_svi_macip, "");
 	} else {
 		if (set && vpn->advertise_svi_macip)
 			return;
@@ -2963,7 +2963,7 @@ static void evpn_set_advertise_svi_macip(struct bgp *bgp, struct bgpevpn *vpn,
 
 		vpn->advertise_svi_macip = set;
 		bgp_zebra_advertise_svi_macip(bgp, vpn->advertise_svi_macip,
-					      vpn->vni);
+					      vpn->name);
 	}
 }
 
