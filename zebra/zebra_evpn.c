@@ -385,8 +385,9 @@ static int ip_prefix_send_to_client(vrf_id_t vrf_id, struct prefix *p,
 	return zserv_send_message(client, s);
 }
 
-int zebra_evpn_advertise_subnet(zebra_evpn_t *zevpn, struct interface *ifp,
-				int advertise)
+static int zebra_evpn_advertise_interface_subnets(zebra_evpn_t *zevpn,
+						  struct interface *ifp,
+						  int advertise)
 {
 	struct listnode *cnode = NULL, *cnnode = NULL;
 	struct connected *c = NULL;
@@ -2097,6 +2098,71 @@ stream_failure:
 	return;
 }
 
+/*
+ * Handle message from client to enable/disable advertisement of g/w macip
+ * routes
+ */
+void zebra_evpn_advertise_subnet(ZAPI_HANDLER_ARGS)
+{
+	struct stream *s;
+	int advertise;
+	zebra_evpn_t *zevpn = NULL;
+	struct interface *ifp = NULL;
+	struct zebra_if *zif = NULL;
+	struct zebra_l2info_vxlan zl2_info;
+	struct interface *vlan_if = NULL;
+	char name[EVPN_NAMSIZ];
+
+	if (!EVPN_ENABLED(zvrf)) {
+		zlog_debug("EVPN GW-MACIP Adv for non-EVPN VRF %u",
+			  zvrf_id(zvrf));
+		return;
+	}
+
+	s = msg;
+	STREAM_GETC(s, advertise);
+	STREAM_GET(name, s, EVPN_NAMSIZ);
+
+	zevpn = zebra_evpn_lookup(name);
+	if (!zevpn)
+		return;
+
+	if (zevpn->advertise_subnet == advertise)
+		return;
+
+	if (IS_ZEBRA_DEBUG_VXLAN)
+		zlog_debug("EVPN subnet Adv %s on %s , currently %s",
+			   advertise ? "enabled" : "disabled", name,
+			   zevpn->advertise_subnet ? "enabled" : "disabled");
+
+
+	zevpn->advertise_subnet = advertise;
+
+	ifp = zevpn->vxlan_if;
+	if (!ifp)
+		return;
+
+	zif = ifp->info;
+
+	/* If down or not mapped to a bridge, we're done. */
+	if (!if_is_operative(ifp) || !zif->brslave_info.br_if)
+		return;
+
+	zl2_info = zif->l2info.vxl;
+
+	vlan_if =
+		zvni_map_to_svi(zl2_info.access_vlan, zif->brslave_info.br_if);
+	if (!vlan_if)
+		return;
+
+	if (zevpn->advertise_subnet)
+		zebra_evpn_advertise_interface_subnets(zevpn, vlan_if, 1);
+	else
+		zebra_evpn_advertise_interface_subnets(zevpn, vlan_if, 0);
+
+stream_failure:
+	return;
+}
 
 /************************** EVPN BGP config management ************************/
 void zebra_evpn_cfg_cleanup(struct hash_bucket *bucket, void *ctxt)

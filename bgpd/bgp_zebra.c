@@ -2001,7 +2001,7 @@ void bgp_zebra_terminate_radv(struct bgp *bgp, struct peer *peer)
 		  : bgp_nht_dereg_enhe_cap_intfs(peer);
 }
 
-int bgp_zebra_advertise_subnet(struct bgp *bgp, int advertise, vni_t vni)
+int bgp_zebra_advertise_subnet(struct bgp *bgp, int advertise, const char *name)
 {
 	struct stream *s = NULL;
 
@@ -2023,7 +2023,7 @@ int bgp_zebra_advertise_subnet(struct bgp *bgp, int advertise, vni_t vni)
 
 	zclient_create_header(s, ZEBRA_ADVERTISE_SUBNET, bgp->vrf_id);
 	stream_putc(s, advertise);
-	stream_put3(s, vni);
+	stream_put(s, name, EVPN_NAMSIZ);
 	stream_putw_at(s, 0, stream_get_endp(s));
 
 	return zclient_send_message(zclient);

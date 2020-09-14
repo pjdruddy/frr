@@ -3056,7 +3056,7 @@ static void evpn_set_advertise_subnet(struct bgp *bgp,
 		return;
 
 	vpn->advertise_subnet = 1;
-	bgp_zebra_advertise_subnet(bgp, vpn->advertise_subnet, vpn->vni);
+	bgp_zebra_advertise_subnet(bgp, vpn->advertise_subnet, vpn->name);
 }
 
 /*
@@ -3068,7 +3068,7 @@ static void evpn_unset_advertise_subnet(struct bgp *bgp, struct bgpevpn *vpn)
 		return;
 
 	vpn->advertise_subnet = 0;
-	bgp_zebra_advertise_subnet(bgp, vpn->advertise_subnet, vpn->vni);
+	bgp_zebra_advertise_subnet(bgp, vpn->advertise_subnet, vpn->name);
 }
 
 /*

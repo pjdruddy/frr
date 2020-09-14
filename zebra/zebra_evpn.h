@@ -170,8 +170,6 @@ int advertise_svi_macip_enabled(zebra_evpn_t *zevpn);
 void zebra_evpn_print(zebra_evpn_t *zevpn, void **ctxt);
 void zebra_evpn_print_hash(struct hash_bucket *bucket, void *ctxt[]);
 void zebra_evpn_print_hash_detail(struct hash_bucket *bucket, void *data);
-int zebra_evpn_advertise_subnet(zebra_evpn_t *zevpn, struct interface *ifp,
-				int advertise);
 int zebra_evpn_gw_macip_add(struct interface *ifp, zebra_evpn_t *zevpn,
 			    struct ethaddr *macaddr, struct ipaddr *ip);
 int zebra_evpn_gw_macip_del(struct interface *ifp, zebra_evpn_t *zevpn,
@@ -212,6 +210,7 @@ void zebra_evpn_remote_macip_add(ZAPI_HANDLER_ARGS);
 void zebra_evpn_remote_macip_del(ZAPI_HANDLER_ARGS);
 void zebra_evpn_advertise_svi_macip(ZAPI_HANDLER_ARGS);
 void zebra_evpn_advertise_gw_macip(ZAPI_HANDLER_ARGS);
+void zebra_evpn_advertise_subnet(ZAPI_HANDLER_ARGS);
 void zebra_evpn_cfg_cleanup(struct hash_bucket *bucket, void *ctxt);
 
 #ifdef __cplusplus
