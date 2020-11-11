@@ -147,7 +147,7 @@ def setup_module(mod):
     for rname, router in router_list.items():
         router.load_config(
             TopoRouter.RD_ZEBRA, os.path.join(CWD, "{}/zebra.conf".format(rname)),
-        "-M /usr/lib/frr/modules/bgpd_snmp.so"
+            "-M /usr/lib/frr/modules/bgpd_snmp.so"
         )
         router.load_config(
             TopoRouter.RD_ISIS, os.path.join(CWD, "{}/isisd.conf".format(rname))
@@ -155,6 +155,10 @@ def setup_module(mod):
         router.load_config(
             TopoRouter.RD_BGP, os.path.join(CWD, "{}/bgpd.conf".format(rname)),
             "-M /usr/lib/frr/modules/bgpd_snmp.so"
+        )
+        router.load_config(
+            TopoRouter.RD_SNMP, os.path.join(CWD, "{}/snmpd.conf".format(rname)),
+            "-Le -Ivacm_conf,usmConf,iquery -V -DAgentX,trap"
         )
 
     # After loading the configurations, this function loads configured daemons.
