@@ -146,8 +146,7 @@ def setup_module(mod):
     # For all registred routers, load the zebra configuration file
     for rname, router in router_list.items():
         router.load_config(
-            TopoRouter.RD_ZEBRA, os.path.join(CWD, "{}/zebra.conf".format(rname)),
-            "-M /usr/lib/frr/modules/bgpd_snmp.so"
+            TopoRouter.RD_ZEBRA, os.path.join(CWD, "{}/zebra.conf".format(rname))
         )
         router.load_config(
             TopoRouter.RD_ISIS, os.path.join(CWD, "{}/isisd.conf".format(rname))
