@@ -173,10 +173,11 @@ def teardown_module(mod):
     tgen.stop_topology()
 
 
-def test_pe1_converge_evpn():
+def test_r1_converge_snmp():
     "Wait for protocol convergence"
     tgen = get_topogen()
 
+    #tgen.mininet_cli()
     r1 = tgen.net.get("r1")
     r1_snmp = SnmpTester(r1, "1.1.1.1", "public", "2c")
     assert r1_snmp.test_oid('bgpVersin', None)
