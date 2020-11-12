@@ -41,6 +41,7 @@ sys.path.append(os.path.join(CWD, "../"))
 from lib import topotest
 from lib.topogen import Topogen, TopoRouter, get_topogen
 from lib.topolog import logger
+from lib.snmptest import SnmpTester
 
 # Required to instantiate the topology builder class.
 from mininet.topo import Topo
@@ -175,7 +176,12 @@ def teardown_module(mod):
 def test_pe1_converge_evpn():
     "Wait for protocol convergence"
     tgen = get_topogen()
-    tgen.mininet_cli()
+
+    r1 = tgen.net.get("r1")
+    r1_snmp = SnmpTester(r1, "1.1.1.1", "public", "2c")
+    assert r1_snmp.test_oid('bgpVersin', None)
+    assert r1_snmp.test_oid("bgpVersion", '10')
+    assert r1_snmp.test_oid_walk('bgpPeerLocalAddr', ['0.0.0.0', '0.0.0.0'])
 
 if __name__ == "__main__":
     args = ["-s"] + sys.argv[1:]
